@@ -205,6 +205,18 @@ function App() {
     }
   };
 
+  const deleteOrder = async (orderId) => {
+    try {
+      await fetchAPI(`/api/admin/orders/${orderId}`, {
+        method: 'DELETE'
+      });
+      loadOrders();
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      throw error;
+    }
+  };
+
   const updateConfig = async (key, value) => {
     try {
       await fetchAPI('/api/admin/config', {
@@ -332,7 +344,7 @@ function App() {
         ) : (
           <>
             {activeTab === 'dashboard' && <Dashboard analytics={analytics} />}
-            {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} />}
+            {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} deleteOrder={deleteOrder} />}
             {activeTab === 'products' && <Products products={products} onCreate={createProduct} onUpdate={updateProduct} onDelete={deleteProduct} />}
             {activeTab === 'promo' && <PromoCodes promoCodes={promoCodes} onCreate={createPromoCode} onUpdate={updatePromoCode} onDelete={deletePromoCode} />}
             {activeTab === 'config' && <Config config={config} updateConfig={updateConfig} />}
@@ -445,13 +457,14 @@ function Dashboard({ analytics }) {
 
   const chartData = [
     { name: 'Tot', value: analytics.totalOrders },
-    { name: 'Pagati', value: analytics.paidOrders },
-    { name: 'Attesa', value: analytics.totalOrders - analytics.paidOrders }
+    { name: 'Pagati', value: analytics.paidOrders + (analytics.deliveredOrders || 0) },
+    { name: 'Consegnati', value: analytics.deliveredOrders || 0 },
+    { name: 'Attesa', value: analytics.totalOrders - analytics.paidOrders - (analytics.deliveredOrders || 0) }
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordini Totali</p>
           <p className="text-2xl md:text-3xl font-bold">{analytics.totalOrders}</p>
@@ -459,6 +472,10 @@ function Dashboard({ analytics }) {
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordini Pagati</p>
           <p className="text-2xl md:text-3xl font-bold text-green-600">{analytics.paidOrders}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <p className="text-xs md:text-sm text-gray-600 mb-1">Consegnati</p>
+          <p className="text-2xl md:text-3xl font-bold text-blue-600">{analytics.deliveredOrders || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Fatturato</p>
@@ -482,42 +499,71 @@ function Dashboard({ analytics }) {
   );
 }
 
-function Orders({ orders, updateStatus }) {
+function Orders({ orders, updateStatus, deleteOrder }) {
   const [filter, setFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredOrders = filter === 'ALL' 
-    ? orders 
-    : orders.filter(o => o.paymentStatus === filter);
+  const filteredOrders = orders.filter(o => {
+    const matchesStatus = filter === 'ALL' || o.paymentStatus === filter;
+    const matchesSearch = !searchTerm || 
+      o.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.customerName && o.customerName.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesStatus && matchesSearch;
+  });
 
   const statusColors = {
     PENDING: 'bg-yellow-100 text-yellow-800',
     PAID: 'bg-green-100 text-green-800',
+    DELIVERED: 'bg-blue-100 text-blue-800',
     FAILED: 'bg-red-100 text-red-800'
+  };
+
+  const handleDelete = async (orderId, orderNumber) => {
+    if (confirm(`Sei sicuro di voler eliminare l'ordine #${orderNumber}? Questa azione è irreversibile.`)) {
+      try {
+        await deleteOrder(orderId);
+      } catch (error) {
+        alert('Errore nell\'eliminazione: ' + error.message);
+      }
+    }
   };
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-3 md:p-4 flex gap-2 overflow-x-auto">
-        {['ALL', 'PENDING', 'PAID', 'FAILED'].map(status => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-3 md:px-4 py-2 rounded font-medium text-xs md:text-sm transition whitespace-nowrap ${
-              filter === status
-                ? 'bg-black text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {status}
-          </button>
-        ))}
+      {/* Filters and Search */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-col md:flex-row gap-3 mb-3">
+          <input
+            type="text"
+            placeholder="🔍 Cerca per email o nome..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 px-4 py-2 border rounded-lg text-sm"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto">
+          {['ALL', 'PENDING', 'PAID', 'DELIVERED', 'FAILED'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`px-3 md:px-4 py-2 rounded font-medium text-xs md:text-sm transition whitespace-nowrap ${
+                filter === status
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Orders List */}
       <div className="space-y-4">
         {filteredOrders.map(order => (
           <div key={order.id} className="bg-white rounded-lg shadow p-4 md:p-6">
             <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-4 gap-2">
-              <div>
+              <div className="flex-1">
                 <div className="flex items-center gap-2 md:gap-3 mb-2">
                   <h3 className="text-base md:text-lg font-bold">
                     #{order.orderNumber.toString().padStart(4, '0')}
@@ -526,21 +572,38 @@ function Orders({ orders, updateStatus }) {
                     {order.paymentStatus}
                   </span>
                 </div>
-                <p className="text-xs md:text-sm text-gray-600">{order.customerEmail}</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(order.createdAt).toLocaleString('it-IT')}
-                </p>
+                
+                {/* Customer Info */}
+                <div className="space-y-1 text-sm">
+                  {order.customerName && (
+                    <p className="font-medium text-gray-900">👤 {order.customerName}</p>
+                  )}
+                  <p className="text-gray-600">📧 {order.customerEmail}</p>
+                  {order.customerPhone && (
+                    <p className="text-gray-600">📱 {order.customerPhone}</p>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    📅 {new Date(order.createdAt).toLocaleString('it-IT')}
+                  </p>
+                </div>
               </div>
+              
               <div className="text-left md:text-right">
                 <p className="text-xl md:text-2xl font-bold">€{order.total.toFixed(2)}</p>
                 {order.discount > 0 && (
                   <p className="text-xs text-green-600">
-                    Sconto: -€{order.discount.toFixed(2)}
+                    Sconto Bundle: -€{order.discount.toFixed(2)}
+                  </p>
+                )}
+                {order.promoDiscount > 0 && (
+                  <p className="text-xs text-green-600">
+                    Codice {order.promoCode}: -€{order.promoDiscount.toFixed(2)}
                   </p>
                 )}
               </div>
             </div>
 
+            {/* Items */}
             <div className="border-t pt-3 md:pt-4 mb-3 md:mb-4">
               {order.items.map((item, i) => (
                 <div key={i} className="flex justify-between text-xs md:text-sm mb-1">
@@ -552,28 +615,47 @@ function Orders({ orders, updateStatus }) {
               ))}
             </div>
 
-            {order.paymentStatus === 'PENDING' && (
-              <div className="flex flex-col md:flex-row gap-2">
+            {/* Actions */}
+            <div className="flex flex-col md:flex-row gap-2">
+              {order.paymentStatus === 'PENDING' && (
+                <>
+                  <button
+                    onClick={() => updateStatus(order.id, 'PAID')}
+                    className="px-3 md:px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs md:text-sm font-medium transition"
+                  >
+                    ✓ Conferma Pagamento
+                  </button>
+                  <button
+                    onClick={() => updateStatus(order.id, 'FAILED')}
+                    className="px-3 md:px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-xs md:text-sm font-medium transition"
+                  >
+                    ✗ Segna come Fallito
+                  </button>
+                </>
+              )}
+              
+              {order.paymentStatus === 'PAID' && (
                 <button
-                  onClick={() => updateStatus(order.id, 'PAID')}
-                  className="px-3 md:px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs md:text-sm font-medium transition"
+                  onClick={() => updateStatus(order.id, 'DELIVERED')}
+                  className="px-3 md:px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs md:text-sm font-medium transition"
                 >
-                  ✓ Conferma
+                  📦 Segna come Consegnato
                 </button>
-                <button
-                  onClick={() => updateStatus(order.id, 'FAILED')}
-                  className="px-3 md:px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-xs md:text-sm font-medium transition"
-                >
-                  ✗ Fallito
-                </button>
-              </div>
-            )}
+              )}
+              
+              <button
+                onClick={() => handleDelete(order.id, order.orderNumber)}
+                className="px-3 md:px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-xs md:text-sm font-medium transition"
+              >
+                🗑️ Elimina Ordine
+              </button>
+            </div>
           </div>
         ))}
 
         {filteredOrders.length === 0 && (
           <div className="text-center py-12 text-gray-500 bg-white rounded-lg shadow">
-            Nessun ordine trovato
+            {searchTerm ? 'Nessun ordine trovato con questa ricerca' : 'Nessun ordine trovato'}
           </div>
         )}
       </div>
@@ -584,6 +666,10 @@ function Orders({ orders, updateStatus }) {
 function Config({ config, updateConfig }) {
   const [editMode, setEditMode] = useState(null);
   const [editValue, setEditValue] = useState('');
+  
+  // Trova launch_prices_active config
+  const launchPricesConfig = config.find(c => c.key === 'launch_prices_active');
+  const launchPricesActive = launchPricesConfig?.value?.active || false;
 
   const startEdit = (key, value) => {
     setEditMode(key);
@@ -599,79 +685,116 @@ function Config({ config, updateConfig }) {
       alert('JSON non valido: ' + err.message);
     }
   };
+  
+  const toggleLaunchPrices = async () => {
+    try {
+      await updateConfig('launch_prices_active', { active: !launchPricesActive });
+    } catch (err) {
+      alert('Errore nell\'aggiornamento: ' + err.message);
+    }
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="p-4 md:p-6 border-b">
-        <h3 className="text-base md:text-lg font-semibold">Configurazione Sistema</h3>
-        <p className="text-xs md:text-sm text-gray-600 mt-1">
-          Gestisci prezzi, sconti e impostazioni
-        </p>
+    <div className="space-y-4">
+      {/* Launch Prices Toggle */}
+      <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="font-semibold text-base md:text-lg mb-1">Prezzi di Lancio</h4>
+            <p className="text-sm text-gray-600">
+              Attiva per mostrare i prezzi promozionali invece dei prezzi base
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={launchPricesActive}
+              onChange={toggleLaunchPrices}
+              className="sr-only peer"
+            />
+            <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
+          </label>
+        </div>
+        <div className="mt-3 text-sm">
+          <span className={`px-3 py-1 rounded-full font-medium ${launchPricesActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+            {launchPricesActive ? '✓ Attivi' : '✗ Disattivi'}
+          </span>
+        </div>
       </div>
 
-      <div className="divide-y">
-        {config.map(item => (
-          <div key={item.key} className="p-4 md:p-6">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-2 gap-2">
-              <div className="flex-1">
-                <h4 className="font-semibold text-sm md:text-base">{item.key}</h4>
-                {item.description && (
-                  <p className="text-xs md:text-sm text-gray-600">{item.description}</p>
+      {/* Other Configs */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-4 md:p-6 border-b">
+          <h3 className="text-base md:text-lg font-semibold">Altre Configurazioni</h3>
+          <p className="text-xs md:text-sm text-gray-600 mt-1">
+            Configurazioni avanzate del sistema
+          </p>
+        </div>
+
+        <div className="divide-y">
+          {config.filter(item => item.key !== 'launch_prices_active').map(item => (
+            <div key={item.key} className="p-4 md:p-6">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-2 gap-2">
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm md:text-base">{item.key}</h4>
+                  {item.description && (
+                    <p className="text-xs md:text-sm text-gray-600">{item.description}</p>
+                  )}
+                </div>
+                {editMode === item.key ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(item.key)}
+                      className="px-3 py-1 bg-green-600 text-white rounded text-xs md:text-sm hover:bg-green-700 transition"
+                    >
+                      Salva
+                    </button>
+                    <button
+                      onClick={() => setEditMode(null)}
+                      className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-xs md:text-sm hover:bg-gray-400 transition"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => startEdit(item.key, item.value)}
+                    className="px-3 py-1 bg-black text-white rounded text-xs md:text-sm hover:bg-gray-800 transition whitespace-nowrap"
+                  >
+                    Modifica
+                  </button>
                 )}
               </div>
+
               {editMode === item.key ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => saveEdit(item.key)}
-                    className="px-3 py-1 bg-green-600 text-white rounded text-xs md:text-sm hover:bg-green-700 transition"
-                  >
-                    Salva
-                  </button>
-                  <button
-                    onClick={() => setEditMode(null)}
-                    className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-xs md:text-sm hover:bg-gray-400 transition"
-                  >
-                    Annulla
-                  </button>
-                </div>
+                <textarea
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="w-full p-3 border rounded font-mono text-xs md:text-sm"
+                  rows={6}
+                />
               ) : (
-                <button
-                  onClick={() => startEdit(item.key, item.value)}
-                  className="px-3 py-1 bg-black text-white rounded text-xs md:text-sm hover:bg-gray-800 transition whitespace-nowrap"
-                >
-                  Modifica
-                </button>
+                <pre className="bg-gray-50 p-3 rounded text-xs overflow-x-auto">
+                  {JSON.stringify(item.value, null, 2)}
+                </pre>
               )}
             </div>
+          ))}
+        </div>
 
-            {editMode === item.key ? (
-              <textarea
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                className="w-full p-3 border rounded font-mono text-xs md:text-sm"
-                rows={6}
-              />
-            ) : (
-              <pre className="bg-gray-50 p-3 rounded text-xs overflow-x-auto">
-                {JSON.stringify(item.value, null, 2)}
-              </pre>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="p-4 md:p-6 bg-gray-50 border-t">
-        <button
-          onClick={() => {
-            const key = prompt('Chiave configurazione:');
-            if (key) {
-              updateConfig(key, {});
-            }
-          }}
-          className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
-        >
-          + Aggiungi
-        </button>
+        <div className="p-4 md:p-6 bg-gray-50 border-t">
+          <button
+            onClick={() => {
+              const key = prompt('Chiave configurazione:');
+              if (key) {
+                updateConfig(key, {});
+              }
+            }}
+            className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
+          >
+            + Aggiungi
+          </button>
+        </div>
       </div>
     </div>
   );
