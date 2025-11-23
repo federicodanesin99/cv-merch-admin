@@ -1119,6 +1119,31 @@ function Products({ products, onCreate, onUpdate, onDelete }) {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1">Descrizione</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                    className="w-full px-3 py-2 border rounded text-sm"
+                    rows={3}
+                    placeholder="Breve descrizione del prodotto..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1">Guida alle Taglie</label>
+                  <textarea
+                    value={formData.sizeGuide}
+                    onChange={(e) => setFormData({...formData, sizeGuide: e.target.value})}
+                    className="w-full px-3 py-2 border rounded text-sm font-mono"
+                    rows={6}
+                    placeholder="S: 66-69 cm petto&#10;M: 71-74 cm petto&#10;..."
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Supporta HTML semplice: usa &lt;br&gt; per andare a capo
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3 md:gap-4">
                   <div>
                     <label className="block text-xs md:text-sm font-medium mb-1">Prezzo Base *</label>
