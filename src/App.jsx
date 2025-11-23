@@ -1329,7 +1329,8 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
     discountValue: '',
     expiresAt: '',
     maxUsesPerUser: 1,
-    isActive: true
+    isActive: true,
+    allowedEmails: []
   });
 
   const resetForm = () => {
@@ -1339,7 +1340,8 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
       discountValue: '',
       expiresAt: '',
       maxUsesPerUser: 1,
-      isActive: true
+      isActive: true,
+      allowedEmails: []
     });
     setEditingPromo(null);
   };
@@ -1357,7 +1359,8 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
       discountValue: promo.discountValue.toString(),
       expiresAt: promo.expiresAt ? new Date(promo.expiresAt).toISOString().slice(0, 16) : '',
       maxUsesPerUser: promo.maxUsesPerUser,
-      isActive: promo.isActive
+      isActive: promo.isActive,
+      allowedEmails: promo.allowedEmails || []
     });
     setShowModal(true);
   };
@@ -1576,6 +1579,27 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
                     onChange={(e) => setFormData({...formData, maxUsesPerUser: parseInt(e.target.value)})}
                     className="w-full px-3 py-2 border rounded text-sm"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs md:text-sm font-medium mb-1">
+                    Limita a Email Specifiche (opzionale)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.allowedEmails.join('\n')}
+                    onChange={(e) => setFormData({
+                      ...formData, 
+                      allowedEmails: e.target.value.split('\n').filter(e => e.trim())
+                    })}
+                    className="w-full px-3 py-2 border rounded text-sm"
+                    rows={4}
+                    placeholder="mario@example.com&#10;luigi@example.com&#10;(una email per riga)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Lascia vuoto per rendere il codice valido per tutti.
+                    Inserisci una email per riga per limitare l'uso.
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2">
