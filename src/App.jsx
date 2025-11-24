@@ -799,6 +799,9 @@ function Config({ config, updateConfig }) {
   // Trova launch_prices_active config
   const launchPricesConfig = config.find(c => c.key === 'launch_prices_active');
   const launchPricesActive = launchPricesConfig?.value?.active || false;
+  // Trova promo_codes_visible config
+  const promoCodesConfig = config.find(c => c.key === 'promo_codes_visible');
+  const promoCodesVisible = promoCodesConfig?.value?.visible !== false; // Default true
 
   const startEdit = (key, value) => {
     setEditMode(key);
@@ -818,6 +821,15 @@ function Config({ config, updateConfig }) {
   const toggleLaunchPrices = async () => {
     try {
       await updateConfig('launch_prices_active', { active: !launchPricesActive });
+    } catch (err) {
+      alert('Errore nell\'aggiornamento: ' + err.message);
+    }
+  };
+
+  // Toggle promo codes visibility
+  const togglePromoCodesVisible = async () => {
+    try {
+      await updateConfig('promo_codes_visible', { visible: !promoCodesVisible });
     } catch (err) {
       alert('Errore nell\'aggiornamento: ' + err.message);
     }
@@ -850,6 +862,35 @@ function Config({ config, updateConfig }) {
           </span>
         </div>
       </div>
+
+    {/* 🆕 Promo Codes Visibility Toggle */}
+    <div className="bg-white rounded-lg shadow p-4 md:p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <h4 className="font-semibold text-base md:text-lg mb-1">Codici Promozionali</h4>
+          <p className="text-sm text-gray-600">
+            Mostra il campo per inserire codici promo nel checkout
+          </p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={promoCodesVisible}
+            onChange={togglePromoCodesVisible}
+            className="sr-only peer"
+          />
+          <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
+        </label>
+      </div>
+      <div className="mt-3 text-sm">
+        <span className={`px-3 py-1 rounded-full font-medium ${promoCodesVisible ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+          {promoCodesVisible ? '✓ Visibile ai clienti' : '✗ Nascosto ai clienti'}
+        </span>
+      </div>
+    </div>
+
+    {/* Other Configs */}
+    <div className="bg-white rounded-lg shadow"></div>
 
       {/* Other Configs */}
       <div className="bg-white rounded-lg shadow">
