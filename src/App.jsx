@@ -626,6 +626,7 @@ function Orders({ orders, updateStatus, deleteOrder }) {
   const statusColors = {
     PENDING: 'bg-yellow-100 text-yellow-800',
     PAID: 'bg-green-100 text-green-800',
+    ORDERED: 'bg-purple-100 text-purple-800',
     DELIVERED: 'bg-blue-100 text-blue-800',
     FAILED: 'bg-red-100 text-red-800'
   };
@@ -654,7 +655,7 @@ function Orders({ orders, updateStatus, deleteOrder }) {
           />
         </div>
         <div className="flex gap-2 overflow-x-auto">
-          {['ALL', 'PENDING', 'PAID', 'DELIVERED', 'FAILED'].map(status => (
+          {['ALL', 'PENDING', 'PAID','ORDERED', 'DELIVERED', 'FAILED'].map(status => (
             <button
               key={status}
               onClick={() => setFilter(status)}
