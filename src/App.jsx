@@ -13,6 +13,10 @@ function App() {
   const [products, setProducts] = useState(null);
   const [promoCodes, setPromoCodes] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [toOrderData, setToOrderData] = useState(null);
+  const [batches, setBatches] = useState(null);
+  const [productStats, setProductStats] = useState(null);
+  const [statsDateRange, setStatsDateRange] = useState({ start: '', end: '' });
 
   useEffect(() => {
     const savedToken = localStorage.getItem('admin_token');
@@ -23,13 +27,18 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      if (activeTab === 'dashboard') loadAnalytics();
-      if (activeTab === 'orders') loadOrders();
-      if (activeTab === 'products') loadProducts();
-      if (activeTab === 'config') loadConfig();
-      if (activeTab === 'promo') loadPromoCodes();
+  if (isAuthenticated) {
+    if (activeTab === 'dashboard') loadAnalytics();
+    if (activeTab === 'orders') loadOrders();
+    if (activeTab === 'to-order') loadToOrder();
+    if (activeTab === 'batches') loadBatches();
+    if (activeTab === 'products') { 
+      loadProducts(); 
+      loadProductStats(); 
     }
+    if (activeTab === 'config') loadConfig();
+    if (activeTab === 'promo') loadPromoCodes();
+  }
   }, [activeTab, isAuthenticated]);
 
   const handleLogin = (token) => {
@@ -284,6 +293,76 @@ function App() {
     }
   };
 
+  const loadToOrder = async () => {
+  setLoading(true);
+  try {
+    const data = await fetchAPI('/api/admin/orders/summary-to-order');
+    setToOrderData(data);
+  } catch (error) {
+    console.error('Error loading to-order:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const loadBatches = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchAPI('/api/admin/batches');
+      if (Array.isArray(data)) {
+        setBatches(data);
+      } else {
+        setBatches([]);
+      }
+    } catch (error) {
+      console.error('Error loading batches:', error);
+      setBatches([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProductStats = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (statsDateRange.start) params.append('startDate', statsDateRange.start);
+      if (statsDateRange.end) params.append('endDate', statsDateRange.end);
+      
+      const data = await fetchAPI(`/api/admin/products/stats?${params}`);
+      setProductStats(data);
+    } catch (error) {
+      console.error('Error loading product stats:', error);
+    }
+  };
+
+  const createBatch = async (orderIds, supplierInfo) => {
+    try {
+      await fetchAPI('/api/admin/batches', {
+        method: 'POST',
+        body: JSON.stringify({ orderIds, ...supplierInfo })
+      });
+      loadBatches();
+      loadToOrder();
+      loadOrders();
+    } catch (error) {
+      console.error('Error creating batch:', error);
+      throw error;
+    }
+  };
+
+  const updateBatch = async (id, data) => {
+    try {
+      await fetchAPI(`/api/admin/batches/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      loadBatches();
+    } catch (error) {
+      console.error('Error updating batch:', error);
+      throw error;
+    }
+  };
+
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
@@ -315,7 +394,7 @@ function App() {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-8 overflow-x-auto">
-            {['dashboard', 'orders', 'products', 'promo', 'config'].map(tab => (
+            {['dashboard', 'orders', 'to-order', 'batches', 'products', 'promo', 'config'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -327,6 +406,8 @@ function App() {
               >
                 {tab === 'dashboard' && '📊 Dashboard'}
                 {tab === 'orders' && '📦 Ordini'}
+                {tab === 'to-order' && '🛒 Da Ordinare'}
+                {tab === 'batches' && '📋 Lotti'}
                 {tab === 'products' && '🛍️ Prodotti'}
                 {tab === 'promo' && '🎟️ Codici'}
                 {tab === 'config' && '⚙️ Config'}
@@ -345,7 +426,9 @@ function App() {
           <>
             {activeTab === 'dashboard' && <Dashboard analytics={analytics} />}
             {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} deleteOrder={deleteOrder} />}
-            {activeTab === 'products' && <Products products={products} onCreate={createProduct} onUpdate={updateProduct} onDelete={deleteProduct} />}
+            {activeTab === 'to-order' && <ToOrder data={toOrderData} onCreateBatch={createBatch} />}
+            {activeTab === 'batches' && <Batches batches={batches} onUpdate={updateBatch} />}   
+            {activeTab === 'products' && <Products products={products} stats={productStats} dateRange={statsDateRange} onDateRangeChange={setStatsDateRange} onRefreshStats={loadProductStats} onCreate={createProduct} onUpdate={updateProduct} onDelete={deleteProduct} />}
             {activeTab === 'promo' && <PromoCodes promoCodes={promoCodes} onCreate={createPromoCode} onUpdate={updatePromoCode} onDelete={deletePromoCode} />}
             {activeTab === 'config' && <Config config={config} updateConfig={updateConfig} />}
           </>
@@ -483,6 +566,34 @@ function Dashboard({ analytics }) {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-semibold text-gray-600">Pagamenti PayPal</h4>
+            <span className="text-2xl">💳</span>
+          </div>
+          <p className="text-2xl md:text-3xl font-bold mb-2">
+            €{analytics.paypalRevenue.toFixed(2)}
+          </p>
+          <p className="text-xs md:text-sm text-gray-500">
+            {analytics.paypalOrders} ordini pagati
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-semibold text-gray-600">Pagamenti Revolut</h4>
+            <span className="text-2xl">🔷</span>
+          </div>
+          <p className="text-2xl md:text-3xl font-bold mb-2">
+            €{analytics.revolutRevenue.toFixed(2)}
+          </p>
+          <p className="text-xs md:text-sm text-gray-500">
+            {analytics.revolutOrders} ordini pagati
+          </p>
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg shadow p-4 md:p-6">
         <h3 className="text-base md:text-lg font-semibold mb-4">Statistiche</h3>
         <ResponsiveContainer width="100%" height={250}>
@@ -495,6 +606,7 @@ function Dashboard({ analytics }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
     </div>
   );
 }
@@ -568,6 +680,11 @@ function Orders({ orders, updateStatus, deleteOrder }) {
                   <h3 className="text-base md:text-lg font-bold">
                     #{order.orderNumber.toString().padStart(4, '0')}
                   </h3>
+                  {order.uniqueCode && (
+                    <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-mono rounded">
+                      {order.uniqueCode}
+                    </span>
+                  )}
                   <span className={`px-2 md:px-3 py-1 rounded-full text-xs font-semibold ${statusColors[order.paymentStatus]}`}>
                     {order.paymentStatus}
                   </span>
@@ -582,6 +699,10 @@ function Orders({ orders, updateStatus, deleteOrder }) {
                   {order.customerPhone && (
                     <p className="text-gray-600">📱 {order.customerPhone}</p>
                   )}
+                  <p className="text-gray-600">
+                    {order.paymentMethod === 'paypal' ? '💳' : '🔷'}{' '}
+                    {order.paymentMethod === 'paypal' ? 'PayPal' : 'Revolut'}
+                  </p>
                   <p className="text-xs text-gray-500">
                     📅 {new Date(order.createdAt).toLocaleString('it-IT')}
                   </p>
@@ -634,13 +755,20 @@ function Orders({ orders, updateStatus, deleteOrder }) {
                 </>
               )}
               
-              {order.paymentStatus === 'PAID' && (
+              {order.paymentStatus === 'ORDERED' && (
                 <button
                   onClick={() => updateStatus(order.id, 'DELIVERED')}
                   className="px-3 md:px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs md:text-sm font-medium transition"
                 >
                   📦 Segna come Consegnato
                 </button>
+              )}
+              
+              {/* Nota: PAID passa a ORDERED tramite creazione lotti */}
+              {order.paymentStatus === 'PAID' && !order.batchId && (
+                <p className="text-xs text-gray-500 italic py-2">
+                  ℹ️ Vai su "Da Ordinare" per includere in un lotto
+                </p>
               )}
               
               <button
@@ -800,7 +928,7 @@ function Config({ config, updateConfig }) {
   );
 }
 
-function Products({ products, onCreate, onUpdate, onDelete }) {
+function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStats, onCreate, onUpdate, onDelete }) {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
@@ -964,11 +1092,19 @@ function Products({ products, onCreate, onUpdate, onDelete }) {
       ).filter(img => img.urls.length > 0)
     });
   };
+  const [showStats, setShowStats] = useState(false);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-        <h2 className="text-xl md:text-2xl font-bold">Gestione Prodotti</h2>
+      <h2 className="text-xl md:text-2xl font-bold">Gestione Prodotti</h2>
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowStats(!showStats)}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm md:text-base"
+        >
+          {showStats ? '🛍️ Mostra Prodotti' : '📊 Mostra Statistiche'}
+        </button>
         <button
           onClick={openCreateModal}
           className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm md:text-base"
@@ -976,6 +1112,138 @@ function Products({ products, onCreate, onUpdate, onDelete }) {
           + Aggiungi Prodotto
         </button>
       </div>
+    </div>
+
+    {/* 🆕 Sezione Statistiche */}
+    {showStats && (
+      <div className="space-y-4">
+        {/* Date Range Picker */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="font-semibold mb-3">Filtro Periodo</h3>
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium mb-1">Da</label>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => onDateRangeChange({...dateRange, start: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium mb-1">A</label>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => onDateRangeChange({...dateRange, end: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={onRefreshStats}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition whitespace-nowrap"
+              >
+                🔄 Aggiorna
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Statistiche Prodotti */}
+        {stats && stats.length > 0 ? (
+          <div className="space-y-4">
+            {stats.map(stat => (
+              <div key={stat.product.id} className="bg-white rounded-lg shadow p-4 md:p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold">{stat.product.name}</h3>
+                  <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full font-bold">
+                    {stat.totalQuantity} pz
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Colori */}
+                  <div>
+                    <h4 className="font-semibold text-sm mb-3">🎨 Per Colore</h4>
+                    <div className="space-y-2">
+                      {Object.entries(stat.byColor)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([color, qty]) => (
+                          <div key={color} className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span>{color}</span>
+                                <span className="font-medium">{qty} pz ({Math.round(qty / stat.totalQuantity * 100)}%)</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className="bg-blue-600 h-2 rounded-full transition-all"
+                                  style={{ width: `${(qty / stat.totalQuantity) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Taglie */}
+                  <div>
+                    <h4 className="font-semibold text-sm mb-3">📏 Per Taglia</h4>
+                    <div className="space-y-2">
+                      {Object.entries(stat.bySize)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([size, qty]) => (
+                          <div key={size} className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span>{size}</span>
+                                <span className="font-medium">{qty} pz ({Math.round(qty / stat.totalQuantity * 100)}%)</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className="bg-green-600 h-2 rounded-full transition-all"
+                                  style={{ width: `${(qty / stat.totalQuantity) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Combinazioni */}
+                <div className="mt-6">
+                  <h4 className="font-semibold text-sm mb-3">🏆 Top Combinazioni</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {Object.values(stat.combinations)
+                      .sort((a, b) => b.quantity - a.quantity)
+                      .slice(0, 6)
+                      .map((combo, i) => (
+                        <div key={i} className="bg-gray-50 rounded p-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-700">{combo.color} - {combo.size}</span>
+                            <span className="font-bold text-blue-600">{combo.quantity}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-white rounded-lg shadow">
+            <p className="text-gray-500">Nessuna vendita nel periodo selezionato</p>
+          </div>
+        )}
+      </div>
+    )}
+
+    {!showStats && (
+     <>
 
       {!products || products.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow">
@@ -1077,7 +1345,8 @@ function Products({ products, onCreate, onUpdate, onDelete }) {
           })}
         </div>
       )}
-
+      </>
+    )}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-lg max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
@@ -1610,8 +1879,7 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
                   <label className="block text-xs md:text-sm font-medium mb-1">
                     Limita a Email Specifiche (opzionale)
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     value={formData.allowedEmails.join('\n')}
                     onChange={(e) => setFormData({
                       ...formData, 
@@ -1658,6 +1926,622 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToOrder({ data, onCreateBatch }) {
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [batchInfo, setBatchInfo] = useState({
+    supplierName: '',
+    supplierCost: '',
+    expectedDelivery: '',
+    notes: ''
+  });
+
+  if (!data) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
+      </div>
+    );
+  }
+
+  const toggleOrder = (orderId) => {
+    setSelectedOrders(prev =>
+      prev.includes(orderId)
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const selectAll = () => {
+    if (selectedOrders.length === data.orders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(data.orders.map(o => o.id));
+    }
+  };
+
+  const openBatchModal = () => {
+    if (selectedOrders.length === 0) {
+      alert('Seleziona almeno un ordine');
+      return;
+    }
+    setShowModal(true);
+  };
+
+  const handleCreateBatch = async () => {
+    try {
+      await onCreateBatch(selectedOrders, batchInfo);
+      setShowModal(false);
+      setSelectedOrders([]);
+      setBatchInfo({ supplierName: '', supplierCost: '', expectedDelivery: '', notes: '' });
+      alert('✅ Lotto creato con successo!');
+    } catch (error) {
+      alert('Errore nella creazione del lotto: ' + error.message);
+    }
+  };
+
+  const generateCSV = () => {
+    let csv = 'Prodotto,Colore,Taglia,Quantità\n';
+    data.summary.forEach(product => {
+      Object.entries(product.byColor).forEach(([color, colorData]) => {
+        Object.entries(colorData.bySize).forEach(([size, qty]) => {
+          csv += `${product.productName},${color},${size},${qty}\n`;
+        });
+      });
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ordine-fornitore-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  const copyToClipboard = () => {
+    let text = '📋 ORDINE FORNITORE\n\n';
+    data.summary.forEach(product => {
+      text += `${product.productName.toUpperCase()} - ${product.total} pz\n`;
+      Object.entries(product.byColor).forEach(([color, colorData]) => {
+        text += `\n  ${color}:\n`;
+        Object.entries(colorData.bySize).forEach(([size, qty]) => {
+          text += `  ├─ ${size}: ${qty} pz\n`;
+        });
+      });
+      text += '\n';
+    });
+    text += `\nTOTALE: ${data.totalItems} pezzi in ${data.totalOrders} ordini`;
+    
+    navigator.clipboard.writeText(text).then(() => {
+      alert('✅ Riepilogo copiato!');
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold mb-2">Ordini da Ordinare</h2>
+            <p className="text-sm text-gray-600">
+              {data.totalOrders} ordini • {data.totalItems} articoli • {selectedOrders.length} selezionati
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copyToClipboard}
+              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm transition"
+            >
+              📋 Copia Riepilogo
+            </button>
+            <button
+              onClick={generateCSV}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition"
+            >
+              📊 Esporta CSV
+            </button>
+            <button
+              onClick={openBatchModal}
+              disabled={selectedOrders.length === 0}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ✅ Crea Lotto ({selectedOrders.length})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Riepilogo Aggregato */}
+      <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <h3 className="text-lg font-bold mb-4">📊 Riepilogo per Fornitore</h3>
+        <div className="space-y-6">
+          {data.summary.map((product, idx) => (
+            <div key={idx} className="border-l-4 border-blue-500 pl-4">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-base md:text-lg font-bold">{product.productName}</h4>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                  {product.total} pz
+                </span>
+              </div>
+              
+              {Object.entries(product.byColor).map(([color, colorData]) => (
+                <div key={color} className="mb-3 ml-4">
+                  <p className="font-semibold text-sm mb-2">{color} - {colorData.total} pz</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 ml-4">
+                    {Object.entries(colorData.bySize).map(([size, qty]) => (
+                      <div key={size} className="flex justify-between text-xs bg-gray-50 p-2 rounded">
+                        <span>{size}:</span>
+                        <span className="font-medium">{qty} pz</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Lista Ordini Selezionabili */}
+      <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold">📦 Ordini da Includere nel Lotto</h3>
+          <button
+            onClick={selectAll}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            {selectedOrders.length === data.orders.length ? 'Deseleziona Tutti' : 'Seleziona Tutti'}
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {data.orders.map(order => (
+            <div
+              key={order.id}
+              className={`border rounded-lg p-3 md:p-4 cursor-pointer transition ${
+                selectedOrders.includes(order.id)
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+              onClick={() => toggleOrder(order.id)}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedOrders.includes(order.id)}
+                  onChange={() => toggleOrder(order.id)}
+                  className="mt-1 w-5 h-5"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                
+                <div className="flex-1">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2 mb-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold">#{order.orderNumber.toString().padStart(4, '0')}</span>
+                        {order.uniqueCode && (
+                          <span className="px-2 py-0.5 bg-gray-100 text-xs font-mono rounded">
+                            {order.uniqueCode}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{order.customerName}</p>
+                      <p className="text-xs text-gray-500">{order.customerEmail}</p>
+                    </div>
+                    <div className="text-left md:text-right">
+                      <p className="font-bold">€{order.total.toFixed(2)}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(order.paidAt).toLocaleDateString('it-IT')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {order.items.map((item, i) => (
+                      <div key={i} className="text-xs bg-white p-2 rounded flex justify-between">
+                        <span>{item.quantity}x {item.product.name} - {item.color} ({item.size})</span>
+                        <span className="font-medium">€{item.lineTotal.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal Creazione Lotto */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-xl font-bold mb-4">Crea Nuovo Lotto</h3>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium mb-1">Nome Fornitore</label>
+                <input
+                  type="text"
+                  value={batchInfo.supplierName}
+                  onChange={(e) => setBatchInfo({...batchInfo, supplierName: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="es. Fornitore XYZ"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Costo Totale (€)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={batchInfo.supplierCost}
+                  onChange={(e) => setBatchInfo({...batchInfo, supplierCost: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Consegna Prevista</label>
+                <input
+                  type="date"
+                  value={batchInfo.expectedDelivery}
+                  onChange={(e) => setBatchInfo({...batchInfo, expectedDelivery: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Note</label>
+                <textarea
+                  value={batchInfo.notes}
+                  onChange={(e) => setBatchInfo({...batchInfo, notes: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  rows={3}
+                  placeholder="Note aggiuntive..."
+                />
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-4">
+              <p className="text-sm font-semibold text-blue-800 mb-1">
+                📦 Verranno inclusi {selectedOrders.length} ordini
+              </p>
+              <p className="text-xs text-blue-700">
+                Gli ordini passeranno allo stato "ORDERED"
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleCreateBatch}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+              >
+                Crea Lotto
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Batches({ batches, onUpdate }) {
+  const [expandedBatch, setExpandedBatch] = useState(null);
+  const [editingBatch, setEditingBatch] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  if (!batches) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
+      </div>
+    );
+  }
+
+  const statusColors = {
+    DRAFT: 'bg-yellow-100 text-yellow-800',
+    ORDERED: 'bg-blue-100 text-blue-800',
+    RECEIVED: 'bg-green-100 text-green-800'
+  };
+
+  const statusLabels = {
+    DRAFT: 'Bozza',
+    ORDERED: 'Ordinato',
+    RECEIVED: 'Ricevuto'
+  };
+
+  const startEdit = (batch) => {
+    setEditingBatch(batch.id);
+    setEditForm({
+      status: batch.status,
+      supplierName: batch.supplierName || '',
+      supplierOrderId: batch.supplierOrderId || '',
+      supplierCost: batch.supplierCost || '',
+      expectedDelivery: batch.expectedDelivery ? new Date(batch.expectedDelivery).toISOString().split('T')[0] : '',
+      receivedAt: batch.receivedAt ? new Date(batch.receivedAt).toISOString().split('T')[0] : '',
+      notes: batch.notes || ''
+    });
+  };
+
+  const saveEdit = async () => {
+    try {
+      await onUpdate(editingBatch, editForm);
+      setEditingBatch(null);
+      alert('✅ Lotto aggiornato!');
+    } catch (error) {
+      alert('Errore: ' + error.message);
+    }
+  };
+
+  const exportBatchCSV = (batch) => {
+    const summary = {};
+    
+    batch.orders.forEach(order => {
+      order.items.forEach(item => {
+        const key = `${item.product.name}|${item.color}|${item.size}`;
+        if (!summary[key]) {
+          summary[key] = {
+            product: item.product.name,
+            color: item.color,
+            size: item.size,
+            quantity: 0
+          };
+        }
+        summary[key].quantity += item.quantity;
+      });
+    });
+
+    let csv = 'Prodotto,Colore,Taglia,Quantità\n';
+    Object.values(summary).forEach(item => {
+      csv += `${item.product},${item.color},${item.size},${item.quantity}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lotto-${batch.batchNumber}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl md:text-2xl font-bold">Storico Lotti</h2>
+        <p className="text-sm text-gray-600">{batches.length} lotti totali</p>
+      </div>
+
+      {batches.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg shadow">
+          <p className="text-gray-500">Nessun lotto creato</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {batches.map(batch => {
+            const totalItems = batch.orders.reduce((sum, o) => 
+              sum + o.items.reduce((s, i) => s + i.quantity, 0), 0
+            );
+            const totalRevenue = batch.orders.reduce((sum, o) => sum + o.total, 0);
+
+            return (
+              <div key={batch.id} className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="p-4 md:p-6">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg md:text-xl font-bold">
+                          Lotto #{batch.batchNumber.toString().padStart(3, '0')}
+                        </h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColors[batch.status]}`}>
+                          {statusLabels[batch.status]}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 text-sm">
+                        <p className="text-gray-600">
+                          📅 Creato: {new Date(batch.createdAt).toLocaleDateString('it-IT')}
+                        </p>
+                        {batch.orderedAt && (
+                          <p className="text-gray-600">
+                            📦 Ordinato: {new Date(batch.orderedAt).toLocaleDateString('it-IT')}
+                          </p>
+                        )}
+                        {batch.expectedDelivery && (
+                          <p className="text-gray-600">
+                            🚚 Consegna prevista: {new Date(batch.expectedDelivery).toLocaleDateString('it-IT')}
+                          </p>
+                        )}
+                        {batch.receivedAt && (
+                          <p className="text-green-600 font-semibold">
+                            ✅ Ricevuto: {new Date(batch.receivedAt).toLocaleDateString('it-IT')}
+                          </p>
+                        )}
+                        {batch.supplierName && (
+                          <p className="text-gray-600">🏭 {batch.supplierName}</p>
+                        )}
+                        {batch.supplierOrderId && (
+                          <p className="text-gray-600 font-mono text-xs">ID: {batch.supplierOrderId}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-left md:text-right">
+                      <p className="text-sm text-gray-600 mb-1">{batch.orders.length} ordini</p>
+                      <p className="text-lg font-bold">{totalItems} pezzi</p>
+                      <p className="text-sm text-gray-600">Fatturato: €{totalRevenue.toFixed(2)}</p>
+                      {batch.supplierCost && (
+                        <p className="text-sm text-blue-600">Costo: €{batch.supplierCost.toFixed(2)}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {batch.notes && (
+                    <div className="bg-gray-50 rounded p-3 mb-4">
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Note:</p>
+                      <p className="text-sm text-gray-700">{batch.notes}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setExpandedBatch(expandedBatch === batch.id ? null : batch.id)}
+                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm transition"
+                    >
+                      {expandedBatch === batch.id ? '▲ Nascondi' : '▼ Dettagli'}
+                    </button>
+                    
+                    <button
+                      onClick={() => exportBatchCSV(batch)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition"
+                    >
+                      📊 Esporta CSV
+                    </button>
+
+                    {batch.status !== 'RECEIVED' && (
+                      <button
+                        onClick={() => editingBatch === batch.id ? setEditingBatch(null) : startEdit(batch)}
+                        className="px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm transition"
+                      >
+                        {editingBatch === batch.id ? '❌ Annulla' : '✏️ Modifica'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Modifica */}
+                {editingBatch === batch.id && (
+                  <div className="border-t p-4 md:p-6 bg-gray-50">
+                    <h4 className="font-semibold mb-4">Modifica Lotto</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Stato</label>
+                        <select
+                          value={editForm.status}
+                          onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        >
+                          <option value="DRAFT">Bozza</option>
+                          <option value="ORDERED">Ordinato</option>
+                          <option value="RECEIVED">Ricevuto</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Nome Fornitore</label>
+                        <input
+                          type="text"
+                          value={editForm.supplierName}
+                          onChange={(e) => setEditForm({...editForm, supplierName: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">ID Ordine Fornitore</label>
+                        <input
+                          type="text"
+                          value={editForm.supplierOrderId}
+                          onChange={(e) => setEditForm({...editForm, supplierOrderId: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Costo (€)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editForm.supplierCost}
+                          onChange={(e) => setEditForm({...editForm, supplierCost: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Consegna Prevista</label>
+                        <input
+                          type="date"
+                          value={editForm.expectedDelivery}
+                          onChange={(e) => setEditForm({...editForm, expectedDelivery: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Data Ricezione</label>
+                        <input
+                          type="date"
+                          value={editForm.receivedAt}
+                          onChange={(e) => setEditForm({...editForm, receivedAt: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-medium mb-1">Note</label>
+                        <textarea
+                          value={editForm.notes}
+                          onChange={(e) => setEditForm({...editForm, notes: e.target.value})}
+                          className="w-full px-3 py-2 border rounded text-sm"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={saveEdit}
+                      className="mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+                    >
+                      💾 Salva Modifiche
+                    </button>
+                  </div>
+                )}
+
+                {/* Dettagli Espansi */}
+                {expandedBatch === batch.id && (
+                  <div className="border-t p-4 md:p-6 bg-gray-50">
+                    <h4 className="font-semibold mb-3">Ordini Inclusi</h4>
+                    <div className="space-y-2">
+                      {batch.orders.map(order => (
+                        <div key={order.id} className="bg-white rounded p-3 text-sm">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <span className="font-bold">#{order.orderNumber.toString().padStart(4, '0')}</span>
+                              {' - '}
+                              <span className="text-gray-600">{order.customerName}</span>
+                            </div>
+                            <span className="font-medium">€{order.total.toFixed(2)}</span>
+                          </div>
+                          <div className="space-y-1 ml-4">
+                            {order.items.map((item, i) => (
+                              <div key={i} className="text-xs text-gray-600">
+                                {item.quantity}x {item.product.name} - {item.color} ({item.size})
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
