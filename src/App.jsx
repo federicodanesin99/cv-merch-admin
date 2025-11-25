@@ -540,7 +540,8 @@ function Dashboard({ analytics }) {
 
   const chartData = [
     { name: 'Tot', value: analytics.totalOrders },
-    { name: 'Pagati', value: analytics.paidOrders + (analytics.deliveredOrders || 0) },
+    { name: 'Pagati', value: analytics.paidOrders + analytics.orderedOrders + (analytics.deliveredOrders || 0) },
+    { name: 'Ordinati', value: analytics.orderedOrders || 0 },
     { name: 'Consegnati', value: analytics.deliveredOrders || 0 },
     { name: 'Attesa', value: analytics.totalOrders - analytics.paidOrders - (analytics.deliveredOrders || 0) }
   ];
