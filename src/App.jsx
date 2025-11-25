@@ -540,7 +540,7 @@ function Dashboard({ analytics }) {
 
   const chartData = [
     { name: 'Tot', value: analytics.totalOrders },
-    { name: 'Pagati', value: analytics.paidOrders + analytics.orderedOrders + (analytics.deliveredOrders || 0) },
+    { name: 'Pagati', value: analytics.paidOrders + analytics.orderedOrders + analytics.deliveredOrders },
     { name: 'Ordinati', value: analytics.orderedOrders || 0 },
     { name: 'Consegnati', value: analytics.deliveredOrders || 0 },
     { name: 'Attesa', value: analytics.totalOrders - analytics.paidOrders - (analytics.deliveredOrders || 0) }
@@ -555,7 +555,11 @@ function Dashboard({ analytics }) {
         </div>
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordini Pagati</p>
-          <p className="text-2xl md:text-3xl font-bold text-green-600">{analytics.paidOrders}</p>
+          <p className="text-2xl md:text-3xl font-bold text-green-600">{analytics.paidOrders + analytics.orderedOrders + analytics.deliveredOrders}</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+          <p className="text-xs md:text-sm text-gray-600 mb-1">Ordinati</p>
+          <p className="text-2xl md:text-3xl font-bold text-blue-600">{analytics.orderedOrders || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Consegnati</p>
