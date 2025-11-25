@@ -619,7 +619,8 @@ function Orders({ orders, updateStatus, deleteOrder }) {
     const matchesStatus = filter === 'ALL' || o.paymentStatus === filter;
     const matchesSearch = !searchTerm || 
       o.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (o.customerName && o.customerName.toLowerCase().includes(searchTerm.toLowerCase()));
+      (o.customerName && o.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      o.uniqueCode.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
@@ -648,7 +649,7 @@ function Orders({ orders, updateStatus, deleteOrder }) {
         <div className="flex flex-col md:flex-row gap-3 mb-3">
           <input
             type="text"
-            placeholder="🔍 Cerca per email o nome..."
+            placeholder="🔍 Cerca per email, nome, codice ordine..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 px-4 py-2 border rounded-lg text-sm"
