@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const API_URL = 'https://cv-merch-backend.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -425,7 +425,7 @@ function App() {
         ) : (
           <>
             {activeTab === 'dashboard' && <Dashboard analytics={analytics} />}
-            {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} deleteOrder={deleteOrder} />}
+            {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} deleteOrder={deleteOrder} adminToken={adminToken} />}
             {activeTab === 'to-order' && <ToOrder data={toOrderData} onCreateBatch={createBatch} />}
             {activeTab === 'batches' && <Batches batches={batches} onUpdate={updateBatch} />}   
             {activeTab === 'products' && <Products products={products} stats={productStats} dateRange={statsDateRange} onDateRangeChange={setStatsDateRange} onRefreshStats={loadProductStats} onCreate={createProduct} onUpdate={updateProduct} onDelete={deleteProduct} />}
@@ -616,7 +616,7 @@ function Dashboard({ analytics }) {
   );
 }
 
-function Orders({ orders, updateStatus, deleteOrder }) {
+function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -673,17 +673,25 @@ function Orders({ orders, updateStatus, deleteOrder }) {
     const statusParam = exportStatuses.includes('ALL') ? 'ALL' : exportStatuses.join(',');
     const url = `${API_URL}/api/admin/orders/export?statuses=${statusParam}`;
     
+    console.log('Exporting from:', url);
+    
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${adminToken}`
       }
     });
 
+    console.log('Response status:', response.status);
+    
     if (!response.ok) {
-      throw new Error('Errore nell\'esportazione');
+      const errorText = await response.text();
+      console.error('Error response:', errorText);
+      throw new Error(`Errore ${response.status}: ${errorText}`);
     }
 
     const blob = await response.blob();
+    console.log('Blob size:', blob.size);
+    
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = downloadUrl;
@@ -694,7 +702,8 @@ function Orders({ orders, updateStatus, deleteOrder }) {
     window.URL.revokeObjectURL(downloadUrl);
     
   } catch (error) {
-    alert('Errore nell\'esportazione: ' + error.message);
+    console.error('Export error:', error);
+    alert('Errore nella esportazione: ' + error.message);
   } finally {
     setIsExporting(false);
   }
