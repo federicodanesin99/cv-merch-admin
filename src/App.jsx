@@ -27,18 +27,21 @@ function App() {
   }, []);
 
   useEffect(() => {
-  if (isAuthenticated) {
-    if (activeTab === 'dashboard') loadAnalytics();
-    if (activeTab === 'orders') loadOrders();
-    if (activeTab === 'to-order') loadToOrder();
-    if (activeTab === 'batches') loadBatches();
-    if (activeTab === 'products') { 
-      loadProducts(); 
-      loadProductStats(); 
+    if (isAuthenticated) {
+      if (activeTab === 'dashboard') {
+        loadAnalytics();
+        loadOrders();
+      }
+      if (activeTab === 'orders') loadOrders();
+      if (activeTab === 'to-order') loadToOrder();
+      if (activeTab === 'batches') loadBatches();
+      if (activeTab === 'products') { 
+        loadProducts(); 
+        loadProductStats(); 
+      }
+      if (activeTab === 'config') loadConfig();
+      if (activeTab === 'promo') loadPromoCodes();
     }
-    if (activeTab === 'config') loadConfig();
-    if (activeTab === 'promo') loadPromoCodes();
-  }
   }, [activeTab, isAuthenticated]);
 
   const handleLogin = (token) => {
@@ -62,7 +65,7 @@ function App() {
         console.log(`[${attempt}/${maxRetries}] Fetching: ${url}`);
         
         const controller = new AbortController();
-        const timeout = attempt === 1 ? 30000 : 15000; // 30s first try, 15s retry
+        const timeout = attempt === 1 ? 30000 : 15000;
         const timeoutId = setTimeout(() => controller.abort(), timeout);
         
         const res = await fetch(url, {
@@ -101,7 +104,6 @@ function App() {
           console.log(`Retrying in 2s...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
         } else if (error.name === 'AbortError') {
-          // Don't retry on timeout, just fail
           break;
         }
       }
@@ -117,6 +119,7 @@ function App() {
       setOrders(data.orders || []);
     } catch (error) {
       console.error('Error loading orders:', error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -138,11 +141,7 @@ function App() {
     setLoading(true);
     try {
       const data = await fetchAPI('/api/admin/products');
-      if (Array.isArray(data)) {
-        setProducts(data);
-      } else {
-        setProducts([]);
-      }
+      setProducts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading products:', error);
       alert('Errore nel caricamento prodotti: ' + error.message);
@@ -209,6 +208,7 @@ function App() {
         body: JSON.stringify({ paymentStatus: status })
       });
       loadOrders();
+      if (activeTab === 'dashboard') loadAnalytics();
     } catch (error) {
       console.error('Error updating order:', error);
     }
@@ -220,6 +220,7 @@ function App() {
         method: 'DELETE'
       });
       loadOrders();
+      if (activeTab === 'dashboard') loadAnalytics();
     } catch (error) {
       console.error('Error deleting order:', error);
       throw error;
@@ -242,11 +243,7 @@ function App() {
     setLoading(true);
     try {
       const data = await fetchAPI('/api/admin/promo-codes');
-      if (Array.isArray(data)) {
-        setPromoCodes(data);
-      } else {
-        setPromoCodes([]);
-      }
+      setPromoCodes(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading promo codes:', error);
       setPromoCodes([]);
@@ -294,26 +291,22 @@ function App() {
   };
 
   const loadToOrder = async () => {
-  setLoading(true);
-  try {
-    const data = await fetchAPI('/api/admin/orders/summary-to-order');
-    setToOrderData(data);
-  } catch (error) {
-    console.error('Error loading to-order:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    try {
+      const data = await fetchAPI('/api/admin/orders/summary-to-order');
+      setToOrderData(data);
+    } catch (error) {
+      console.error('Error loading to-order:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadBatches = async () => {
     setLoading(true);
     try {
       const data = await fetchAPI('/api/admin/batches');
-      if (Array.isArray(data)) {
-        setBatches(data);
-      } else {
-        setBatches([]);
-      }
+      setBatches(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading batches:', error);
       setBatches([]);
@@ -359,6 +352,21 @@ function App() {
       loadBatches();
     } catch (error) {
       console.error('Error updating batch:', error);
+      throw error;
+    }
+  };
+
+  const createManualOrder = async (orderData) => {
+    try {
+      await fetchAPI('/api/admin/orders/manual', {
+        method: 'POST',
+        body: JSON.stringify(orderData)
+      });
+      loadOrders();
+      loadAnalytics();
+      alert('✅ Ordine creato con successo!');
+    } catch (error) {
+      console.error('Error creating manual order:', error);
       throw error;
     }
   };
@@ -418,13 +426,13 @@ function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {loading ? (
+        {loading && activeTab !== 'dashboard' ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
           </div>
         ) : (
           <>
-            {activeTab === 'dashboard' && <Dashboard analytics={analytics} />}
+            {activeTab === 'dashboard' && <Dashboard analytics={analytics} orders={orders} onCreate={createManualOrder} />}
             {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} deleteOrder={deleteOrder} adminToken={adminToken} />}
             {activeTab === 'to-order' && <ToOrder data={toOrderData} onCreateBatch={createBatch} />}
             {activeTab === 'batches' && <Batches batches={batches} onUpdate={updateBatch} />}   
@@ -449,7 +457,6 @@ function Login({ onLogin }) {
     setError('');
     
     try {
-      // Pre-warm se il backend è dormiente
       try {
         await fetch(`${API_URL}/health`, { 
           signal: AbortSignal.timeout(5000) 
@@ -462,7 +469,7 @@ function Login({ onLogin }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
-        signal: AbortSignal.timeout(30000) // 30s timeout
+        signal: AbortSignal.timeout(30000)
       });
 
       const data = await res.json();
@@ -529,11 +536,23 @@ function Login({ onLogin }) {
   );
 }
 
-function Dashboard({ analytics }) {
-  if (!analytics) {
+function Dashboard({ analytics, orders, onCreate }) {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    payments: true,
+    chart: true,
+    delivered: false
+  });
+
+  useEffect(() => {
+    console.log('showCreateModal changed:', showCreateModal);
+  }, [showCreateModal]);
+
+  if (!analytics || !orders) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Caricamento analytics...</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
+        <p className="text-gray-500">Caricamento dashboard...</p>
       </div>
     );
   }
@@ -546,72 +565,540 @@ function Dashboard({ analytics }) {
     { name: 'Attesa', value: analytics.totalOrders - analytics.paidOrders - (analytics.deliveredOrders || 0) }
   ];
 
+  const deliveredOrders = orders.filter(o => o.paymentStatus === 'DELIVERED');
+
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <button
+          onClick={() => {
+            console.log('Bottone crea ordine cliccato');
+            setShowCreateModal(true);
+          }}
+          className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm font-medium"
+        >
+          + Crea Ordine Manuale
+        </button>
+      </div>
+
+      {/* Statistiche principali */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordini Totali</p>
           <p className="text-2xl md:text-3xl font-bold">{analytics.totalOrders}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordini Pagati</p>
-          <p className="text-2xl md:text-3xl font-bold text-green-600">{analytics.paidOrders + analytics.orderedOrders + analytics.deliveredOrders}</p>
+          <p className="text-2xl md:text-3xl font-bold text-green-600">
+            {analytics.paidOrders + analytics.orderedOrders + analytics.deliveredOrders}
+          </p>
         </div>
         <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordinati</p>
           <p className="text-2xl md:text-3xl font-bold text-blue-600">{analytics.orderedOrders || 0}</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <p className="text-xs md:text-sm text-gray-600 mb-1">Consegnati</p>
-          <p className="text-2xl md:text-3xl font-bold text-blue-600">{analytics.deliveredOrders || 0}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <p className="text-xs md:text-sm text-gray-600 mb-1">Fatturato</p>
-          <p className="text-2xl md:text-3xl font-bold">€{analytics.revenue.toFixed(2)}</p>
+        <div 
+          className="bg-white rounded-lg shadow p-4 md:p-6 cursor-pointer hover:bg-gray-50 transition" 
+          onClick={() => toggleSection('delivered')}
+        >
+          <p className="text-xs md:text-sm text-gray-600 mb-1">Consegnati 📦</p>
+          <p className="text-2xl md:text-3xl font-bold text-purple-600">{analytics.deliveredOrders || 0}</p>
+          <p className="text-xs text-purple-500 mt-1">Clicca per dettagli</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-semibold text-gray-600">Pagamenti PayPal</h4>
-            <span className="text-2xl">💳</span>
+      {/* Sezione Pagamenti */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <button
+          onClick={() => toggleSection('payments')}
+          className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition"
+        >
+          <h3 className="text-lg font-semibold">💰 Dettaglio Pagamenti</h3>
+          <span className="text-xl">{expandedSections.payments ? '▲' : '▼'}</span>
+        </button>
+        
+        {expandedSections.payments && (
+          <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-lg shadow p-4 md:p-6">
+              <p className="text-xs md:text-sm text-gray-600 mb-1">Fatturato</p>
+              <p className="text-2xl md:text-3xl font-bold">€{analytics.revenue.toFixed(2)}</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-700">PayPal</h4>
+                <span className="text-2xl">💳</span>
+              </div>
+              <p className="text-2xl font-bold mb-2">€{analytics.paypalRevenue.toFixed(2)}</p>
+              <p className="text-sm text-gray-600">{analytics.paypalOrders} ordini pagati</p>
+            </div>
+
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-700">Revolut</h4>
+                <span className="text-2xl">🔷</span>
+              </div>
+              <p className="text-2xl font-bold mb-2">€{analytics.revolutRevenue.toFixed(2)}</p>
+              <p className="text-sm text-gray-600">{analytics.revolutOrders} ordini pagati</p>
+            </div>
           </div>
-          <p className="text-2xl md:text-3xl font-bold mb-2">
-            €{analytics.paypalRevenue.toFixed(2)}
-          </p>
-          <p className="text-xs md:text-sm text-gray-500">
-            {analytics.paypalOrders} ordini pagati
-          </p>
-        </div>
+        )}
+      </div>
 
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-semibold text-gray-600">Pagamenti Revolut</h4>
-            <span className="text-2xl">🔷</span>
+      {/* Sezione Grafico */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <button
+          onClick={() => toggleSection('chart')}
+          className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition"
+        >
+          <h3 className="text-lg font-semibold">📊 Statistiche Visive</h3>
+          <span className="text-xl">{expandedSections.chart ? '▲' : '▼'}</span>
+        </button>
+        
+        {expandedSections.chart && (
+          <div className="p-4 border-t">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#000" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          <p className="text-2xl md:text-3xl font-bold mb-2">
-            €{analytics.revolutRevenue.toFixed(2)}
-          </p>
-          <p className="text-xs md:text-sm text-gray-500">
-            {analytics.revolutOrders} ordini pagati
-          </p>
+        )}
+      </div>
+
+      {/* Sezione Ordini Consegnati */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <button
+          onClick={() => toggleSection('delivered')}
+          className="w-full p-4 flex justify-between items-center hover:bg-gray-50 transition"
+        >
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold">📦 Ordini Consegnati</h3>
+            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+              {deliveredOrders.length}
+            </span>
+          </div>
+          <span className="text-xl">{expandedSections.delivered ? '▲' : '▼'}</span>
+        </button>
+        
+        {expandedSections.delivered && (
+          <div className="p-4 border-t">
+            {deliveredOrders.length === 0 ? (
+              <p className="text-center text-gray-500 py-6">Nessun ordine consegnato ancora</p>
+            ) : (
+              <div className="space-y-3">
+                {deliveredOrders.map(order => (
+                  <div key={order.id} className="bg-purple-50 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold">#{order.orderNumber.toString().padStart(4, '0')}</span>
+                          {order.uniqueCode && (
+                            <span className="px-2 py-0.5 bg-white text-xs font-mono rounded">
+                              {order.uniqueCode}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-700">{order.customerName}</p>
+                        <p className="text-xs text-gray-600">{order.customerEmail}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">€{order.total.toFixed(2)}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(order.createdAt).toLocaleDateString('it-IT')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="border-t border-purple-200 pt-2 space-y-1">
+                      {order.items.map((item, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-gray-700">
+                            {item.quantity}x {item.product.name} - {item.color} ({item.size})
+                          </span>
+                          <span className="font-medium">€{item.lineTotal.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <CreateOrderModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={onCreate}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
+  const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [formData, setFormData] = useState({
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    paymentMethod: 'paypal',
+    paymentStatus: 'PAID',
+    items: [],
+    customTotal: '',
+    notes: ''
+  });
+
+  useEffect(() => {
+    console.log('CreateOrderModal opened - loading products...');
+    loadProducts();
+  }, []);
+
+  const loadProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await fetch(`${API_URL}/api/products`);
+      const data = await res.json();
+      console.log('Prodotti caricati:', data);
+      // L'API ritorna { products: [...], ... } non direttamente l'array
+      const productsArray = data.products || [];
+      console.log('Numero prodotti:', productsArray.length);
+      setProducts(productsArray);
+    } catch (error) {
+      console.error('Error loading products:', error);
+      setProducts([]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const addItem = () => {
+    setFormData({
+      ...formData,
+      items: [...formData.items, {
+        productId: '',
+        color: '',
+        size: '',
+        quantity: 1,
+        customPrice: ''
+      }]
+    });
+  };
+
+  const updateItem = (index, field, value) => {
+    const newItems = [...formData.items];
+    newItems[index][field] = value;
+    setFormData({ ...formData, items: newItems });
+  };
+
+  const removeItem = (index) => {
+    setFormData({
+      ...formData,
+      items: formData.items.filter((_, i) => i !== index)
+    });
+  };
+
+  const calculateTotal = () => {
+    if (formData.customTotal) return parseFloat(formData.customTotal);
+    
+    if (!Array.isArray(products) || products.length === 0) return 0;
+    
+    return formData.items.reduce((sum, item) => {
+      const product = products.find(p => p.id === item.productId);
+      if (!product) return sum;
+      
+      const price = item.customPrice 
+        ? parseFloat(item.customPrice) 
+        : (product.launchPrice || product.basePrice);
+      
+      return sum + (price * item.quantity);
+    }, 0);
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.customerEmail || formData.items.length === 0) {
+      alert('Compila email cliente e aggiungi almeno un prodotto');
+      return;
+    }
+
+    for (const item of formData.items) {
+      if (!item.productId || !item.color || !item.size) {
+        alert('Completa tutti i campi dei prodotti');
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const orderData = {
+        ...formData,
+        items: formData.items.map(item => ({
+          ...item,
+          quantity: parseInt(item.quantity),
+          customPrice: item.customPrice ? parseFloat(item.customPrice) : null
+        })),
+        customTotal: formData.customTotal ? parseFloat(formData.customTotal) : null
+      };
+
+      await onCreate(orderData);
+      onClose();
+    } catch (error) {
+      alert('Errore: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-3xl w-full my-8 max-h-[90vh] overflow-y-auto">
+        <div className="p-6 sticky top-0 bg-white border-b z-10">
+          <div className="flex justify-between items-center">
+            <h3 className="text-2xl font-bold">Crea Ordine Manuale</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Dati Cliente */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h4 className="font-semibold mb-3">👤 Dati Cliente</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Nome *</label>
+                <input
+                  type="text"
+                  value={formData.customerName}
+                  onChange={(e) => setFormData({...formData, customerName: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="Mario Rossi"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={formData.customerEmail}
+                  onChange={(e) => setFormData({...formData, customerEmail: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="mario@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Telefono</label>
+                <input
+                  type="tel"
+                  value={formData.customerPhone}
+                  onChange={(e) => setFormData({...formData, customerPhone: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  placeholder="+39 123 456 7890"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Dettagli Ordine */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h4 className="font-semibold mb-3">💳 Dettagli Pagamento</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Metodo</label>
+                <select
+                  value={formData.paymentMethod}
+                  onChange={(e) => setFormData({...formData, paymentMethod: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                >
+                  <option value="paypal">PayPal</option>
+                  <option value="revolut">Revolut</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Stato</label>
+                <select
+                  value={formData.paymentStatus}
+                  onChange={(e) => setFormData({...formData, paymentStatus: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                >
+                  <option value="PENDING">In Attesa</option>
+                  <option value="PAID">Pagato</option>
+                  <option value="ORDERED">Ordinato</option>
+                  <option value="DELIVERED">Consegnato</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Prodotti */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="font-semibold">🛍️ Prodotti</h4>
+              <button
+                onClick={addItem}
+                className="px-3 py-1 bg-black text-white rounded text-sm hover:bg-gray-800"
+              >
+                + Aggiungi
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {formData.items.map((item, index) => {
+                const selectedProduct = products.find(p => p.id === item.productId);
+                
+                return (
+                  <div key={index} className="bg-white rounded-lg p-3 border">
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-12 md:col-span-4">
+                        <label className="block text-xs font-medium mb-1">Prodotto</label>
+                        <select
+                          value={item.productId}
+                          onChange={(e) => updateItem(index, 'productId', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-sm"
+                          disabled={loadingProducts}
+                        >
+                          <option value="">
+                            {loadingProducts ? 'Caricamento...' : 'Seleziona...'}
+                          </option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-span-6 md:col-span-2">
+                        <label className="block text-xs font-medium mb-1">Colore</label>
+                        <select
+                          value={item.color}
+                          onChange={(e) => updateItem(index, 'color', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-sm"
+                          disabled={!selectedProduct}
+                        >
+                          <option value="">-</option>
+                          {selectedProduct?.colors.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-span-6 md:col-span-2">
+                        <label className="block text-xs font-medium mb-1">Taglia</label>
+                        <select
+                          value={item.size}
+                          onChange={(e) => updateItem(index, 'size', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-sm"
+                          disabled={!selectedProduct}
+                        >
+                          <option value="">-</option>
+                          {selectedProduct?.sizes.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-span-4 md:col-span-1">
+                        <label className="block text-xs font-medium mb-1">Qtà</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-sm"
+                        />
+                      </div>
+
+                      <div className="col-span-6 md:col-span-2">
+                        <label className="block text-xs font-medium mb-1">Prezzo €</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.customPrice}
+                          onChange={(e) => updateItem(index, 'customPrice', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-sm"
+                          placeholder={selectedProduct ? (selectedProduct.launchPrice || selectedProduct.basePrice).toFixed(2) : '0.00'}
+                        />
+                      </div>
+
+                      <div className="col-span-2 md:col-span-1 flex items-end">
+                        <button
+                          onClick={() => removeItem(index)}
+                          className="w-full px-2 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {formData.items.length === 0 && (
+                <p className="text-center text-gray-500 text-sm py-4">Nessun prodotto aggiunto</p>
+              )}
+            </div>
+          </div>
+
+          {/* Totale */}
+          <div className="bg-blue-50 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="font-semibold">💰 Totale</h4>
+              <p className="text-2xl font-bold">€{calculateTotal().toFixed(2)}</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">
+                Totale personalizzato (opzionale)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.customTotal}
+                onChange={(e) => setFormData({...formData, customTotal: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="Lascia vuoto per calcolo automatico"
+              />
+            </div>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="block text-sm font-medium mb-1">📝 Note</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              className="w-full px-3 py-2 border rounded text-sm"
+              rows={2}
+              placeholder="Note interne sull'ordine..."
+            />
+          </div>
+        </div>
+
+        <div className="p-6 border-t bg-gray-50 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            disabled={loading}
+          >
+            Annulla
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex-1 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loading ? 'Creazione...' : 'Crea Ordine'}
+          </button>
         </div>
       </div>
-
-      <div className="bg-white rounded-lg shadow p-4 md:p-6">
-        <h3 className="text-base md:text-lg font-semibold mb-4">Statistiche</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="value" fill="#000" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
     </div>
   );
 }
@@ -621,7 +1108,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [exportStatuses, setExportStatuses] = useState(['ALL']);
-  const [isExporting, setIsExporting] = useState(false); 
+  const [isExporting, setIsExporting] = useState(false);
   const ordersPerPage = 15;
 
   const filteredOrders = orders.filter(o => {
@@ -633,12 +1120,30 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
     return matchesStatus && matchesSearch;
   });
 
-  // Paginazione
+  // Calcola statistiche per il filtro corrente
+  const currentFilterStats = {
+    totalOrders: filteredOrders.length,
+    totalRevenue: filteredOrders.reduce((sum, o) => sum + o.total, 0),
+    totalItems: filteredOrders.reduce((sum, o) => 
+      sum + o.items.reduce((s, i) => s + i.quantity, 0), 0
+    ),
+    byProduct: {}
+  };
+
+  filteredOrders.forEach(order => {
+    order.items.forEach(item => {
+      const key = item.product.name;
+      if (!currentFilterStats.byProduct[key]) {
+        currentFilterStats.byProduct[key] = 0;
+      }
+      currentFilterStats.byProduct[key] += item.quantity;
+    });
+  });
+
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
   const paginatedOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
 
-  // Reset pagina quando cambia filtro o ricerca
   const handleFilterChange = (newFilter) => {
     setFilter(newFilter);
     setCurrentPage(1);
@@ -668,64 +1173,58 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
   };
 
   const handleExport = async () => {
-  setIsExporting(true);
-  try {
-    const statusParam = exportStatuses.includes('ALL') ? 'ALL' : exportStatuses.join(',');
-    const url = `${API_URL}/api/admin/orders/export?statuses=${statusParam}`;
-    
-    console.log('Exporting from:', url);
-    
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${adminToken}`
+    setIsExporting(true);
+    try {
+      const statusParam = exportStatuses.includes('ALL') || exportStatuses.length === 0
+        ? 'ALL' 
+        : exportStatuses.join(',');
+      const url = `${API_URL}/api/admin/orders/export?statuses=${statusParam}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Errore ${response.status}: ${errorText}`);
       }
-    });
 
-    console.log('Response status:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error response:', errorText);
-      throw new Error(`Errore ${response.status}: ${errorText}`);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `ordini-${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Errore nella esportazione: ' + error.message);
+    } finally {
+      setIsExporting(false);
     }
+  };
 
-    const blob = await response.blob();
-    console.log('Blob size:', blob.size);
-    
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `ordini-${new Date().toISOString().split('T')[0]}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(downloadUrl);
-    
-  } catch (error) {
-    console.error('Export error:', error);
-    alert('Errore nella esportazione: ' + error.message);
-  } finally {
-    setIsExporting(false);
-  }
-};
-
-const toggleExportStatus = (status) => {
-  if (status === 'ALL') {
-    setExportStatuses(['ALL']);
-  } else {
-    const newStatuses = exportStatuses.filter(s => s !== 'ALL');
-    if (newStatuses.includes(status)) {
-      const filtered = newStatuses.filter(s => s !== status);
-      setExportStatuses(filtered.length === 0 ? ['ALL'] : filtered);
+  const toggleExportStatus = (status) => {
+    if (status === 'ALL') {
+      setExportStatuses(['ALL']);
     } else {
-      setExportStatuses([...newStatuses, status]);
+      const newStatuses = exportStatuses.filter(s => s !== 'ALL');
+      if (newStatuses.includes(status)) {
+        const filtered = newStatuses.filter(s => s !== status);
+        setExportStatuses(filtered.length === 0 ? ['ALL'] : filtered);
+      } else {
+        setExportStatuses([...newStatuses, status]);
+      }
     }
-  }
-};
+  };
 
   return (
     <div className="space-y-4">
-      {/* Filters, Search and Export */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-col md:flex-row gap-3 mb-3">
           <input
@@ -737,7 +1236,6 @@ const toggleExportStatus = (status) => {
           />
         </div>
         
-        {/* Filtri Visualizzazione */}
         <div className="mb-3">
           <p className="text-xs font-medium text-gray-600 mb-2">Filtra visualizzazione:</p>
           <div className="flex gap-2 overflow-x-auto">
@@ -757,7 +1255,37 @@ const toggleExportStatus = (status) => {
           </div>
         </div>
 
-        {/* Export Excel */}
+        {filter !== 'ALL' && filteredOrders.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+            <h4 className="font-semibold text-sm mb-2">📊 Riepilogo {filter}</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <p className="text-xs text-gray-600">Ordini</p>
+                <p className="text-lg font-bold">{currentFilterStats.totalOrders}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Articoli</p>
+                <p className="text-lg font-bold">{currentFilterStats.totalItems}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Fatturato</p>
+                <p className="text-lg font-bold">€{currentFilterStats.totalRevenue.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Per Prodotto</p>
+                <div className="text-xs">
+                  {Object.entries(currentFilterStats.byProduct).map(([product, qty]) => (
+                    <div key={product} className="flex justify-between">
+                      <span className="truncate mr-2">{product}:</span>
+                      <span className="font-medium">{qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="border-t pt-3">
           <div className="flex flex-col md:flex-row md:items-center gap-3">
             <div className="flex-1">
@@ -807,7 +1335,6 @@ const toggleExportStatus = (status) => {
         </div>
       </div>
 
-      {/* Orders List */}
       <div className="space-y-4">
         {paginatedOrders.map(order => (
           <div key={order.id} className="bg-white rounded-lg shadow p-4 md:p-6">
@@ -827,7 +1354,6 @@ const toggleExportStatus = (status) => {
                   </span>
                 </div>
                 
-                {/* Customer Info */}
                 <div className="space-y-1 text-sm">
                   {order.customerName && (
                     <p className="font-medium text-gray-900">👤 {order.customerName}</p>
@@ -861,7 +1387,6 @@ const toggleExportStatus = (status) => {
               </div>
             </div>
 
-            {/* Items */}
             <div className="border-t pt-3 md:pt-4 mb-3 md:mb-4">
               {order.items.map((item, i) => (
                 <div key={i} className="flex justify-between text-xs md:text-sm mb-1">
@@ -873,7 +1398,6 @@ const toggleExportStatus = (status) => {
               ))}
             </div>
 
-            {/* Actions */}
             <div className="flex flex-col md:flex-row gap-2">
               {order.paymentStatus === 'PENDING' && (
                 <>
@@ -901,7 +1425,6 @@ const toggleExportStatus = (status) => {
                 </button>
               )}
               
-              {/* Nota: PAID passa a ORDERED tramite creazione lotti */}
               {order.paymentStatus === 'PAID' && !order.batchId && (
                 <p className="text-xs text-gray-500 italic py-2">
                   ℹ️ Vai su "Da Ordinare" per includere in un lotto
@@ -924,7 +1447,6 @@ const toggleExportStatus = (status) => {
           </div>
         )}
 
-        {/* Paginazione */}
         {totalPages > 1 && (
           <div className="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-gray-600">
@@ -993,21 +1515,19 @@ const toggleExportStatus = (status) => {
             </div>
           </div>
         )}
-              </div>
-            </div>
-          );
-        }
+      </div>
+    </div>
+  );
+}
 
 function Config({ config, updateConfig }) {
   const [editMode, setEditMode] = useState(null);
   const [editValue, setEditValue] = useState('');
   
-  // Trova launch_prices_active config
   const launchPricesConfig = config.find(c => c.key === 'launch_prices_active');
   const launchPricesActive = launchPricesConfig?.value?.active || false;
-  // Trova promo_codes_visible config
   const promoCodesConfig = config.find(c => c.key === 'promo_codes_visible');
-  const promoCodesVisible = promoCodesConfig?.value?.visible !== false; // Default true
+  const promoCodesVisible = promoCodesConfig?.value?.visible !== false;
 
   const startEdit = (key, value) => {
     setEditMode(key);
@@ -1032,7 +1552,6 @@ function Config({ config, updateConfig }) {
     }
   };
 
-  // Toggle promo codes visibility
   const togglePromoCodesVisible = async () => {
     try {
       await updateConfig('promo_codes_visible', { visible: !promoCodesVisible });
@@ -1043,7 +1562,6 @@ function Config({ config, updateConfig }) {
 
   return (
     <div className="space-y-4">
-      {/* Launch Prices Toggle */}
       <div className="bg-white rounded-lg shadow p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div className="flex-1">
@@ -1069,36 +1587,31 @@ function Config({ config, updateConfig }) {
         </div>
       </div>
 
-    {/* 🆕 Promo Codes Visibility Toggle */}
-    <div className="bg-white rounded-lg shadow p-4 md:p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <h4 className="font-semibold text-base md:text-lg mb-1">Codici Promozionali</h4>
-          <p className="text-sm text-gray-600">
-            Mostra il campo per inserire codici promo nel checkout
-          </p>
+      <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="font-semibold text-base md:text-lg mb-1">Codici Promozionali</h4>
+            <p className="text-sm text-gray-600">
+              Mostra il campo per inserire codici promo nel checkout
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={promoCodesVisible}
+              onChange={togglePromoCodesVisible}
+              className="sr-only peer"
+            />
+            <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
+          </label>
         </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={promoCodesVisible}
-            onChange={togglePromoCodesVisible}
-            className="sr-only peer"
-          />
-          <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600"></div>
-        </label>
+        <div className="mt-3 text-sm">
+          <span className={`px-3 py-1 rounded-full font-medium ${promoCodesVisible ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+            {promoCodesVisible ? '✓ Visibile ai clienti' : '✗ Nascosto ai clienti'}
+          </span>
+        </div>
       </div>
-      <div className="mt-3 text-sm">
-        <span className={`px-3 py-1 rounded-full font-medium ${promoCodesVisible ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-          {promoCodesVisible ? '✓ Visibile ai clienti' : '✗ Nascosto ai clienti'}
-        </span>
-      </div>
-    </div>
 
-    {/* Other Configs */}
-    <div className="bg-white rounded-lg shadow"></div>
-
-      {/* Other Configs */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-4 md:p-6 border-b">
           <h3 className="text-base md:text-lg font-semibold">Altre Configurazioni</h3>
@@ -1108,7 +1621,7 @@ function Config({ config, updateConfig }) {
         </div>
 
         <div className="divide-y">
-          {config.filter(item => item.key !== 'launch_prices_active').map(item => (
+          {config.filter(item => item.key !== 'launch_prices_active' && item.key !== 'promo_codes_visible').map(item => (
             <div key={item.key} className="p-4 md:p-6">
               <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-2 gap-2">
                 <div className="flex-1">
@@ -1179,6 +1692,7 @@ function Config({ config, updateConfig }) {
 function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStats, onCreate, onUpdate, onDelete }) {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [showStats, setShowStats] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -1340,524 +1854,544 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
       ).filter(img => img.urls.length > 0)
     });
   };
-  const [showStats, setShowStats] = useState(false);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-      <h2 className="text-xl md:text-2xl font-bold">Gestione Prodotti</h2>
-      <div className="flex gap-2">
-        <button
-          onClick={() => setShowStats(!showStats)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm md:text-base"
-        >
-          {showStats ? '🛍️ Mostra Prodotti' : '📊 Mostra Statistiche'}
-        </button>
-        <button
-          onClick={openCreateModal}
-          className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm md:text-base"
-        >
-          + Aggiungi Prodotto
-        </button>
+        <h2 className="text-xl md:text-2xl font-bold">Gestione Prodotti</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowStats(!showStats)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm md:text-base"
+          >
+            {showStats ? '🛍️ Mostra Prodotti' : '📊 Mostra Statistiche'}
+          </button>
+          <button
+            onClick={openCreateModal}
+            className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm md:text-base"
+          >
+            + Aggiungi Prodotto
+          </button>
+        </div>
       </div>
-    </div>
 
-    {/* 🆕 Sezione Statistiche */}
-    {showStats && (
-      <div className="space-y-4">
-        {/* Date Range Picker */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-3">Filtro Periodo</h3>
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1">
-              <label className="block text-xs font-medium mb-1">Da</label>
+      {showStats && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="font-semibold mb-3">Filtro Periodo</h3>
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-medium mb-1">Da</label>
+                <input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => onDateRangeChange({...dateRange, start: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium mb-1">A</label>
+                <input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => onDateRangeChange({...dateRange, end: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={onRefreshStats}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition whitespace-nowrap"
+                >
+                  🔄 Aggiorna
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {stats && stats.length > 0 ? (
+            <div className="space-y-4">
+              {stats.map(stat => (
+                <div key={stat.product.id} className="bg-white rounded-lg shadow p-4 md:p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold">{stat.product.name}</h3>
+                    <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full font-bold">
+                      {stat.totalQuantity} pz
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-semibold text-sm mb-3">🎨 Per Colore</h4>
+                      <div className="space-y-2">
+                        {Object.entries(stat.byColor)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([color, qty]) => (
+                            <div key={color} className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{color}</span>
+                                  <span className="font-medium">{qty} pz ({Math.round(qty / stat.totalQuantity * 100)}%)</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className="bg-blue-600 h-2 rounded-full transition-all"
+                                    style={{ width: `${(qty / stat.totalQuantity) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-sm mb-3">📏 Per Taglia</h4>
+                      <div className="space-y-2">
+                        {Object.entries(stat.bySize)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([size, qty]) => (
+                            <div key={size} className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{size}</span>
+                                  <span className="font-medium">{qty} pz ({Math.round(qty / stat.totalQuantity * 100)}%)</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className="bg-green-600 h-2 rounded-full transition-all"
+                                    style={{ width: `${(qty / stat.totalQuantity) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <h4 className="font-semibold text-sm mb-3">🏆 Top Combinazioni</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      {Object.values(stat.combinations)
+                        .sort((a, b) => b.quantity - a.quantity)
+                        .slice(0, 6)
+                        .map((combo, i) => (
+                          <div key={i} className="bg-gray-50 rounded p-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-700">{combo.color} - {combo.size}</span>
+                              <span className="font-bold text-blue-600">{combo.quantity}</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-white rounded-lg shadow">
+              <p className="text-gray-500">Nessuna vendita nel periodo selezionato</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!showStats && (
+        <>
+          {!products || products.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg shadow">
+              <p className="text-gray-500 mb-2 text-sm md:text-base">
+                {products === null ? 'Caricamento...' : 'Nessun prodotto'}
+              </p>
+              {products !== null && (
+                <button
+                  onClick={openCreateModal}
+                  className="mt-4 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
+                >
+                  Aggiungi il primo prodotto
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {products.map(product => {
+                const firstImage = product.images && product.images.length > 0 
+                  ? product.images[0].urls[0] 
+                  : null;
+                
+                return (
+                  <div key={product.id} className="bg-white rounded-lg shadow p-4 md:p-6">
+                    {firstImage && (
+                      <div className="mb-4">
+                        <img 
+                          src={firstImage} 
+                          alt={product.name}
+                          className="w-full h-40 md:h-48 object-cover rounded"
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-start mb-3 md:mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-base md:text-xl font-bold">{product.name}</h3>
+                          {!product.isActive && (
+                            <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">
+                              Off
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs md:text-sm text-gray-600 mb-2">/{product.slug}</p>
+                        
+                        <div className="space-y-1">
+                          <p className="text-sm md:text-lg font-semibold">
+                            €{product.basePrice.toFixed(2)}
+                          </p>
+                          {product.launchPrice && (
+                            <p className="text-xs md:text-sm text-green-600">
+                              Lancio: €{product.launchPrice.toFixed(2)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mb-3">
+                      <p className="text-xs md:text-sm font-medium text-gray-700 mb-1">Colori:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {product.colors.map((color, i) => (
+                          <span key={i} className="px-2 py-1 bg-gray-100 text-xs rounded">
+                            {color}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <p className="text-xs md:text-sm font-medium text-gray-700 mb-1">Taglie:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {product.sizes.map((size, i) => (
+                          <span key={i} className="px-2 py-1 bg-gray-100 text-xs rounded">
+                            {size}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEditModal(product)}
+                        className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs md:text-sm transition"
+                      >
+                        ✏️ Modifica
+                      </button>
+                      <button
+                        onClick={() => handleDelete(product.id, product.name)}
+                        className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm transition"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {showModal && (
+        <ProductModal
+          editingProduct={editingProduct}
+          formData={formData}
+          setFormData={setFormData}
+          newColor={newColor}
+          setNewColor={setNewColor}
+          newSize={newSize}
+          setNewSize={setNewSize}
+          newImageUrl={newImageUrl}
+          setNewImageUrl={setNewImageUrl}
+          selectedColorForImage={selectedColorForImage}
+          setSelectedColorForImage={setSelectedColorForImage}
+          addColor={addColor}
+          removeColor={removeColor}
+          addSize={addSize}
+          removeSize={removeSize}
+          addImage={addImage}
+          removeImage={removeImage}
+          handleSubmit={handleSubmit}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProductModal({
+  editingProduct, formData, setFormData, newColor, setNewColor,
+  newSize, setNewSize, newImageUrl, setNewImageUrl,
+  selectedColorForImage, setSelectedColorForImage,
+  addColor, removeColor, addSize, removeSize,
+  addImage, removeImage, handleSubmit, onClose
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
+        <div className="p-4 md:p-6">
+          <div className="flex justify-between items-center mb-4 md:mb-6">
+            <h3 className="text-lg md:text-2xl font-bold">
+              {editingProduct ? 'Modifica' : 'Nuovo Prodotto'}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          </div>
+
+          <div className="space-y-3 md:space-y-4">
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Nome *</label>
               <input
-                type="date"
-                value={dateRange.start}
-                onChange={(e) => onDateRangeChange({...dateRange, start: e.target.value})}
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
                 className="w-full px-3 py-2 border rounded text-sm"
+                required
               />
             </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium mb-1">A</label>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Slug *</label>
               <input
-                type="date"
-                value={dateRange.end}
-                onChange={(e) => onDateRangeChange({...dateRange, end: e.target.value})}
+                type="text"
+                value={formData.slug}
+                onChange={(e) => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
                 className="w-full px-3 py-2 border rounded text-sm"
+                placeholder="hoody-militare"
+                required
+                disabled={!!editingProduct}
               />
             </div>
-            <div className="flex items-end">
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Descrizione</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+                rows={3}
+                placeholder="Breve descrizione del prodotto..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Guida alle Taglie</label>
+              <textarea
+                value={formData.sizeGuide}
+                onChange={(e) => setFormData({...formData, sizeGuide: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm font-mono"
+                rows={6}
+                placeholder="S: 66-69 cm petto&#10;M: 71-74 cm petto&#10;..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Supporta HTML semplice: usa &lt;br&gt; per andare a capo
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1">Prezzo Base *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.basePrice}
+                  onChange={(e) => setFormData({...formData, basePrice: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs md:text-sm font-medium mb-1">Lancio</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.launchPrice}
+                  onChange={(e) => setFormData({...formData, launchPrice: e.target.value})}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Colori</label>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={newColor}
+                  onChange={(e) => setNewColor(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addColor())}
+                  className="flex-1 px-3 py-2 border rounded text-sm"
+                  placeholder="Aggiungi colore..."
+                />
+                <button
+                  type="button"
+                  onClick={addColor}
+                  className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+                >
+                  +
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.colors.map((color, i) => (
+                  <span
+                    key={i}
+                    className="px-2 md:px-3 py-1 bg-blue-100 text-blue-800 rounded flex items-center gap-2 text-xs md:text-sm"
+                  >
+                    {color}
+                    <button
+                      type="button"
+                      onClick={() => removeColor(color)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Immagini</label>
+              <div className="space-y-2 mb-2">
+                <select
+                  value={selectedColorForImage}
+                  onChange={(e) => setSelectedColorForImage(e.target.value)}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  disabled={formData.colors.length === 0}
+                >
+                  <option value="">Seleziona colore...</option>
+                  {formData.colors.map((color, i) => (
+                    <option key={i} value={color}>{color}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newImageUrl}
+                    onChange={(e) => setNewImageUrl(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded text-sm"
+                    placeholder="URL immagine..."
+                  />
+                  <button
+                    type="button"
+                    onClick={addImage}
+                    className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-40 md:max-h-64 overflow-y-auto">
+                {formData.colors.map(color => {
+                  const colorImages = formData.images.find(img => img.color === color);
+                  if (!colorImages || colorImages.urls.length === 0) return null;
+
+                  return (
+                    <div key={color} className="border rounded p-2 bg-gray-50">
+                      <p className="text-xs font-semibold mb-2">{color}</p>
+                      <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                        {colorImages.urls.map((url, i) => (
+                          <div key={i} className="relative group">
+                            <img
+                              src={url}
+                              alt={`${color}-${i}`}
+                              className="w-full h-16 md:h-20 object-cover rounded"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(color, url)}
+                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Taglie</label>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={newSize}
+                  onChange={(e) => setNewSize(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSize())}
+                  className="flex-1 px-3 py-2 border rounded text-sm"
+                  placeholder="Aggiungi taglia..."
+                />
+                <button
+                  type="button"
+                  onClick={addSize}
+                  className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+                >
+                  +
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.sizes.map((size, i) => (
+                  <span
+                    key={i}
+                    className="px-2 md:px-3 py-1 bg-green-100 text-green-800 rounded flex items-center gap-2 text-xs md:text-sm"
+                  >
+                    {size}
+                    <button
+                      type="button"
+                      onClick={() => removeSize(size)}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                className="w-4 h-4"
+              />
+              <label htmlFor="isActive" className="text-xs md:text-sm font-medium">
+                Prodotto attivo
+              </label>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-2 pt-4">
               <button
-                onClick={onRefreshStats}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition whitespace-nowrap"
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition text-sm"
               >
-                🔄 Aggiorna
+                Annulla
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
+              >
+                {editingProduct ? 'Salva' : 'Crea'}
               </button>
             </div>
           </div>
         </div>
-
-        {/* Statistiche Prodotti */}
-        {stats && stats.length > 0 ? (
-          <div className="space-y-4">
-            {stats.map(stat => (
-              <div key={stat.product.id} className="bg-white rounded-lg shadow p-4 md:p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold">{stat.product.name}</h3>
-                  <span className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full font-bold">
-                    {stat.totalQuantity} pz
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Colori */}
-                  <div>
-                    <h4 className="font-semibold text-sm mb-3">🎨 Per Colore</h4>
-                    <div className="space-y-2">
-                      {Object.entries(stat.byColor)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([color, qty]) => (
-                          <div key={color} className="flex items-center gap-3">
-                            <div className="flex-1">
-                              <div className="flex justify-between text-sm mb-1">
-                                <span>{color}</span>
-                                <span className="font-medium">{qty} pz ({Math.round(qty / stat.totalQuantity * 100)}%)</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div
-                                  className="bg-blue-600 h-2 rounded-full transition-all"
-                                  style={{ width: `${(qty / stat.totalQuantity) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-
-                  {/* Taglie */}
-                  <div>
-                    <h4 className="font-semibold text-sm mb-3">📏 Per Taglia</h4>
-                    <div className="space-y-2">
-                      {Object.entries(stat.bySize)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([size, qty]) => (
-                          <div key={size} className="flex items-center gap-3">
-                            <div className="flex-1">
-                              <div className="flex justify-between text-sm mb-1">
-                                <span>{size}</span>
-                                <span className="font-medium">{qty} pz ({Math.round(qty / stat.totalQuantity * 100)}%)</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div
-                                  className="bg-green-600 h-2 rounded-full transition-all"
-                                  style={{ width: `${(qty / stat.totalQuantity) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Top Combinazioni */}
-                <div className="mt-6">
-                  <h4 className="font-semibold text-sm mb-3">🏆 Top Combinazioni</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    {Object.values(stat.combinations)
-                      .sort((a, b) => b.quantity - a.quantity)
-                      .slice(0, 6)
-                      .map((combo, i) => (
-                        <div key={i} className="bg-gray-50 rounded p-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-700">{combo.color} - {combo.size}</span>
-                            <span className="font-bold text-blue-600">{combo.quantity}</span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500">Nessuna vendita nel periodo selezionato</p>
-          </div>
-        )}
       </div>
-    )}
-
-    {!showStats && (
-     <>
-
-      {!products || products.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <p className="text-gray-500 mb-2 text-sm md:text-base">
-            {products === null ? 'Caricamento...' : 'Nessun prodotto'}
-          </p>
-          {products !== null && (
-            <button
-              onClick={openCreateModal}
-              className="mt-4 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
-            >
-              Aggiungi il primo prodotto
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {products.map(product => {
-            const firstImage = product.images && product.images.length > 0 
-              ? product.images[0].urls[0] 
-              : null;
-            
-            return (
-              <div key={product.id} className="bg-white rounded-lg shadow p-4 md:p-6">
-                {firstImage && (
-                  <div className="mb-4">
-                    <img 
-                      src={firstImage} 
-                      alt={product.name}
-                      className="w-full h-40 md:h-48 object-cover rounded"
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
-                  </div>
-                )}
-
-                <div className="flex justify-between items-start mb-3 md:mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-base md:text-xl font-bold">{product.name}</h3>
-                      {!product.isActive && (
-                        <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">
-                          Off
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs md:text-sm text-gray-600 mb-2">/{product.slug}</p>
-                    
-                    <div className="space-y-1">
-                      <p className="text-sm md:text-lg font-semibold">
-                        €{product.basePrice.toFixed(2)}
-                      </p>
-                      {product.launchPrice && (
-                        <p className="text-xs md:text-sm text-green-600">
-                          Lancio: €{product.launchPrice.toFixed(2)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-3">
-                  <p className="text-xs md:text-sm font-medium text-gray-700 mb-1">Colori:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {product.colors.map((color, i) => (
-                      <span key={i} className="px-2 py-1 bg-gray-100 text-xs rounded">
-                        {color}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <p className="text-xs md:text-sm font-medium text-gray-700 mb-1">Taglie:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {product.sizes.map((size, i) => (
-                      <span key={i} className="px-2 py-1 bg-gray-100 text-xs rounded">
-                        {size}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => openEditModal(product)}
-                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs md:text-sm transition"
-                  >
-                    ✏️ Modifica
-                  </button>
-                  <button
-                    onClick={() => handleDelete(product.id, product.name)}
-                    className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm transition"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      </>
-    )}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
-            <div className="p-4 md:p-6">
-              <div className="flex justify-between items-center mb-4 md:mb-6">
-                <h3 className="text-lg md:text-2xl font-bold">
-                  {editingProduct ? 'Modifica' : 'Nuovo Prodotto'}
-                </h3>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-3 md:space-y-4">
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Nome *</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Slug *</label>
-                  <input
-                    type="text"
-                    value={formData.slug}
-                    onChange={(e) => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                    placeholder="hoody-militare"
-                    required
-                    disabled={!!editingProduct}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Descrizione</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                    rows={3}
-                    placeholder="Breve descrizione del prodotto..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Guida alle Taglie</label>
-                  <textarea
-                    value={formData.sizeGuide}
-                    onChange={(e) => setFormData({...formData, sizeGuide: e.target.value})}
-                    className="w-full px-3 py-2 border rounded text-sm font-mono"
-                    rows={6}
-                    placeholder="S: 66-69 cm petto&#10;M: 71-74 cm petto&#10;..."
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Supporta HTML semplice: usa &lt;br&gt; per andare a capo
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 md:gap-4">
-                  <div>
-                    <label className="block text-xs md:text-sm font-medium mb-1">Prezzo Base *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.basePrice}
-                      onChange={(e) => setFormData({...formData, basePrice: e.target.value})}
-                      className="w-full px-3 py-2 border rounded text-sm"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs md:text-sm font-medium mb-1">Lancio</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.launchPrice}
-                      onChange={(e) => setFormData({...formData, launchPrice: e.target.value})}
-                      className="w-full px-3 py-2 border rounded text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Colori</label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newColor}
-                      onChange={(e) => setNewColor(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addColor())}
-                      className="flex-1 px-3 py-2 border rounded text-sm"
-                      placeholder="Aggiungi colore..."
-                    />
-                    <button
-                      type="button"
-                      onClick={addColor}
-                      className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.colors.map((color, i) => (
-                      <span
-                        key={i}
-                        className="px-2 md:px-3 py-1 bg-blue-100 text-blue-800 rounded flex items-center gap-2 text-xs md:text-sm"
-                      >
-                        {color}
-                        <button
-                          type="button"
-                          onClick={() => removeColor(color)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Immagini</label>
-                  <div className="space-y-2 mb-2">
-                    <select
-                      value={selectedColorForImage}
-                      onChange={(e) => setSelectedColorForImage(e.target.value)}
-                      className="w-full px-3 py-2 border rounded text-sm"
-                      disabled={formData.colors.length === 0}
-                    >
-                      <option value="">Seleziona colore...</option>
-                      {formData.colors.map((color, i) => (
-                        <option key={i} value={color}>{color}</option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        value={newImageUrl}
-                        onChange={(e) => setNewImageUrl(e.target.value)}
-                        className="flex-1 px-3 py-2 border rounded text-sm"
-                        placeholder="URL immagine..."
-                      />
-                      <button
-                        type="button"
-                        onClick={addImage}
-                        className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 max-h-40 md:max-h-64 overflow-y-auto">
-                    {formData.colors.map(color => {
-                      const colorImages = formData.images.find(img => img.color === color);
-                      if (!colorImages || colorImages.urls.length === 0) return null;
-
-                      return (
-                        <div key={color} className="border rounded p-2 bg-gray-50">
-                          <p className="text-xs font-semibold mb-2">{color}</p>
-                          <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                            {colorImages.urls.map((url, i) => (
-                              <div key={i} className="relative group">
-                                <img
-                                  src={url}
-                                  alt={`${color}-${i}`}
-                                  className="w-full h-16 md:h-20 object-cover rounded"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeImage(color, url)}
-                                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Taglie</label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newSize}
-                      onChange={(e) => setNewSize(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSize())}
-                      className="flex-1 px-3 py-2 border rounded text-sm"
-                      placeholder="Aggiungi taglia..."
-                    />
-                    <button
-                      type="button"
-                      onClick={addSize}
-                      className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.sizes.map((size, i) => (
-                      <span
-                        key={i}
-                        className="px-2 md:px-3 py-1 bg-green-100 text-green-800 rounded flex items-center gap-2 text-xs md:text-sm"
-                      >
-                        {size}
-                        <button
-                          type="button"
-                          onClick={() => removeSize(size)}
-                          className="text-green-600 hover:text-green-800"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isActive" className="text-xs md:text-sm font-medium">
-                    Prodotto attivo
-                  </label>
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-2 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition text-sm"
-                  >
-                    Annulla
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    className="flex-1 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
-                  >
-                    {editingProduct ? 'Salva' : 'Crea'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2039,143 +2573,149 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg max-w-md w-full my-8">
-            <div className="p-4 md:p-6">
-              <div className="flex justify-between items-center mb-4 md:mb-6">
-                <h3 className="text-lg md:text-2xl font-bold">
-                  {editingPromo ? 'Modifica Codice' : 'Nuovo Codice'}
-                </h3>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-600 text-xl"
-                >
-                  ✕
-                </button>
-              </div>
+        <PromoModal
+          editingPromo={editingPromo}
+          formData={formData}
+          setFormData={setFormData}
+          handleSubmit={handleSubmit}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </div>
+  );
+}
 
-              <div className="space-y-3 md:space-y-4">
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Codice *</label>
-                  <input
-                    type="text"
-                    value={formData.code}
-                    onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
-                    className="w-full px-3 py-2 border rounded text-sm font-mono uppercase"
-                    placeholder="PROMO10"
-                    maxLength={20}
-                    required
-                    disabled={!!editingPromo}
-                  />
-                  {editingPromo && (
-                    <p className="text-xs text-gray-500 mt-1">Il codice non può essere modificato</p>
-                  )}
-                </div>
+function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-md w-full my-8">
+        <div className="p-4 md:p-6">
+          <div className="flex justify-between items-center mb-4 md:mb-6">
+            <h3 className="text-lg md:text-2xl font-bold">
+              {editingPromo ? 'Modifica Codice' : 'Nuovo Codice'}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Tipo Sconto *</label>
-                  <select
-                    value={formData.discountType}
-                    onChange={(e) => setFormData({...formData, discountType: e.target.value})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                  >
-                    <option value="PERCENTAGE">Percentuale (%)</option>
-                    <option value="FIXED">Importo Fisso (€)</option>
-                  </select>
-                </div>
+          <div className="space-y-3 md:space-y-4">
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Codice *</label>
+              <input
+                type="text"
+                value={formData.code}
+                onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                className="w-full px-3 py-2 border rounded text-sm font-mono uppercase"
+                placeholder="PROMO10"
+                maxLength={20}
+                required
+                disabled={!!editingPromo}
+              />
+              {editingPromo && (
+                <p className="text-xs text-gray-500 mt-1">Il codice non può essere modificato</p>
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">
-                    Valore Sconto * {formData.discountType === 'PERCENTAGE' ? '(%)' : '(€)'}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={formData.discountType === 'PERCENTAGE' ? '100' : undefined}
-                    value={formData.discountValue}
-                    onChange={(e) => setFormData({...formData, discountValue: e.target.value})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                    placeholder={formData.discountType === 'PERCENTAGE' ? '10' : '5.00'}
-                    required
-                  />
-                </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Tipo Sconto *</label>
+              <select
+                value={formData.discountType}
+                onChange={(e) => setFormData({...formData, discountType: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+              >
+                <option value="PERCENTAGE">Percentuale (%)</option>
+                <option value="FIXED">Importo Fisso (€)</option>
+              </select>
+            </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Data Scadenza</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.expiresAt}
-                    onChange={(e) => setFormData({...formData, expiresAt: e.target.value})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Lascia vuoto per nessuna scadenza</p>
-                </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">
+                Valore Sconto * {formData.discountType === 'PERCENTAGE' ? '(%)' : '(€)'}
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max={formData.discountType === 'PERCENTAGE' ? '100' : undefined}
+                value={formData.discountValue}
+                onChange={(e) => setFormData({...formData, discountValue: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+                placeholder={formData.discountType === 'PERCENTAGE' ? '10' : '5.00'}
+                required
+              />
+            </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">Max Usi per Utente</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.maxUsesPerUser}
-                    onChange={(e) => setFormData({...formData, maxUsesPerUser: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                  />
-                </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Data Scadenza</label>
+              <input
+                type="datetime-local"
+                value={formData.expiresAt}
+                onChange={(e) => setFormData({...formData, expiresAt: e.target.value})}
+                className="w-full px-3 py-2 border rounded text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">Lascia vuoto per nessuna scadenza</p>
+            </div>
 
-                <div>
-                  <label className="block text-xs md:text-sm font-medium mb-1">
-                    Limita a Email Specifiche (opzionale)
-                  </label>
-                  <textarea
-                    value={formData.allowedEmails.join('\n')}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      allowedEmails: e.target.value.split('\n').filter(e => e.trim())
-                    })}
-                    className="w-full px-3 py-2 border rounded text-sm"
-                    rows={4}
-                    placeholder="mario@example.com&#10;luigi@example.com&#10;(una email per riga)"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Lascia vuoto per rendere il codice valido per tutti.
-                    Inserisci una email per riga per limitare l'uso.
-                  </p>
-                </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Max Usi per Utente</label>
+              <input
+                type="number"
+                min="1"
+                value={formData.maxUsesPerUser}
+                onChange={(e) => setFormData({...formData, maxUsesPerUser: parseInt(e.target.value)})}
+                className="w-full px-3 py-2 border rounded text-sm"
+              />
+            </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isActive" className="text-xs md:text-sm font-medium">
-                    Codice attivo
-                  </label>
-                </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">
+                Limita a Email Specifiche (opzionale)
+              </label>
+              <textarea
+                value={formData.allowedEmails.join('\n')}
+                onChange={(e) => setFormData({
+                  ...formData, 
+                  allowedEmails: e.target.value.split('\n').filter(e => e.trim())
+                })}
+                className="w-full px-3 py-2 border rounded text-sm"
+                rows={4}
+                placeholder="mario@example.com&#10;luigi@example.com&#10;(una email per riga)"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Lascia vuoto per rendere il codice valido per tutti.
+              </p>
+            </div>
 
-                <div className="flex flex-col md:flex-row gap-2 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition text-sm"
-                  >
-                    Annulla
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    className="flex-1 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
-                  >
-                    {editingPromo ? 'Salva' : 'Crea'}
-                  </button>
-                </div>
-              </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                className="w-4 h-4"
+              />
+              <label htmlFor="isActive" className="text-xs md:text-sm font-medium">
+                Codice attivo
+              </label>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-2 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition text-sm"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition text-sm"
+              >
+                {editingPromo ? 'Salva' : 'Crea'}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -2273,7 +2813,6 @@ function ToOrder({ data, onCreateBatch }) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="bg-white rounded-lg shadow p-4 md:p-6">
         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <div>
@@ -2306,7 +2845,6 @@ function ToOrder({ data, onCreateBatch }) {
         </div>
       </div>
 
-      {/* Riepilogo Aggregato */}
       <div className="bg-white rounded-lg shadow p-4 md:p-6">
         <h3 className="text-lg font-bold mb-4">📊 Riepilogo per Fornitore</h3>
         <div className="space-y-6">
@@ -2337,7 +2875,6 @@ function ToOrder({ data, onCreateBatch }) {
         </div>
       </div>
 
-      {/* Lista Ordini Selezionabili */}
       <div className="bg-white rounded-lg shadow p-4 md:p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-bold">📦 Ordini da Includere nel Lotto</h3>
@@ -2406,7 +2943,6 @@ function ToOrder({ data, onCreateBatch }) {
         </div>
       </div>
 
-      {/* Modal Creazione Lotto */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
@@ -2671,7 +3207,6 @@ function Batches({ batches, onUpdate }) {
                   </div>
                 </div>
 
-                {/* Form Modifica */}
                 {editingBatch === batch.id && (
                   <div className="border-t p-4 md:p-6 bg-gray-50">
                     <h4 className="font-semibold mb-4">Modifica Lotto</h4>
@@ -2760,7 +3295,6 @@ function Batches({ batches, onUpdate }) {
                   </div>
                 )}
 
-                {/* Dettagli Espansi */}
                 {expandedBatch === batch.id && (
                   <div className="border-t p-4 md:p-6 bg-gray-50">
                     <h4 className="font-semibold mb-3">Ordini Inclusi</h4>
