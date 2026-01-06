@@ -1689,13 +1689,17 @@ function Config({ config, updateConfig }) {
   );
 }
 
+// Sostituisci l'intera funzione Products in App.jsx con questa:
+
 function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStats, onCreate, onUpdate, onDelete }) {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [showStats, setShowStats] = useState(false);
+  const [existingCategories, setExistingCategories] = useState([]); // ✅ AGGIUNGI QUESTO
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
+    category: '', // ✅ AGGIUNGI QUESTO
     description: '',
     sizeGuide: '',
     basePrice: '',
@@ -1710,10 +1714,19 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
   const [newImageUrl, setNewImageUrl] = useState('');
   const [selectedColorForImage, setSelectedColorForImage] = useState('');
 
+  // ✅ AGGIUNGI QUESTO useEffect per estrarre le categorie
+  useEffect(() => {
+    if (products && products.length > 0) {
+      const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+      setExistingCategories(categories);
+    }
+  }, [products]);
+
   const resetForm = () => {
     setFormData({
       name: '',
       slug: '',
+      category: '', // ✅ AGGIUNGI QUESTO
       description: '',
       sizeGuide: '',
       basePrice: '',
@@ -1740,6 +1753,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
     setFormData({
       name: product.name,
       slug: product.slug,
+      category: product.category || '', // ✅ AGGIUNGI QUESTO
       description: product.description || '',
       sizeGuide: product.sizeGuide || '',
       basePrice: product.basePrice.toString(),
@@ -2042,6 +2056,11 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
                               Off
                             </span>
                           )}
+                          {product.category && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded capitalize">
+                              {product.category}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs md:text-sm text-gray-600 mb-2">/{product.slug}</p>
                         
@@ -2107,6 +2126,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
           editingProduct={editingProduct}
           formData={formData}
           setFormData={setFormData}
+          existingCategories={existingCategories}
           newColor={newColor}
           setNewColor={setNewColor}
           newSize={newSize}
@@ -2129,13 +2149,18 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
   );
 }
 
+// Sostituisci la funzione ProductModal in App.jsx con questa:
+
 function ProductModal({
-  editingProduct, formData, setFormData, newColor, setNewColor,
+  editingProduct, formData, setFormData, existingCategories,
+  newColor, setNewColor,
   newSize, setNewSize, newImageUrl, setNewImageUrl,
   selectedColorForImage, setSelectedColorForImage,
   addColor, removeColor, addSize, removeSize,
   addImage, removeImage, handleSubmit, onClose
 }) {
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-lg max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
@@ -2170,6 +2195,55 @@ function ProductModal({
                 required
                 disabled={!!editingProduct}
               />
+            </div>
+
+            {/* ✅ CAMPO CATEGORIA */}
+            <div>
+              <label className="block text-xs md:text-sm font-medium mb-1">Categoria</label>
+              <div className="space-y-2">
+                {!isCreatingNewCategory ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({...formData, category: e.target.value})}
+                      className="flex-1 px-3 py-2 border rounded text-sm capitalize"
+                    >
+                      <option value="">Nessuna categoria</option>
+                      {existingCategories.map(cat => (
+                        <option key={cat} value={cat} className="capitalize">{cat}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingNewCategory(true)}
+                      className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+                    >
+                      + Nuova
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={formData.category}
+                      onChange={(e) => setFormData({...formData, category: e.target.value.toLowerCase()})}
+                      className="flex-1 px-3 py-2 border rounded text-sm"
+                      placeholder="es. felpe, t-shirt, cd..."
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingNewCategory(false)}
+                      className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Usata per organizzare i prodotti nel menu
+              </p>
             </div>
 
             <div>
