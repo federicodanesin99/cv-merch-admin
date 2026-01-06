@@ -2491,11 +2491,10 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
       expiresAt: '',
       maxUsesPerUser: 1,
       isActive: true,
-      allowedEmails: []
+      allowedEmails: []  // ✅ Array vuoto di default
     });
     setEditingPromo(null);
   };
-
   const openCreateModal = () => {
     resetForm();
     setShowModal(true);
@@ -2510,7 +2509,7 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
       expiresAt: promo.expiresAt ? new Date(promo.expiresAt).toISOString().slice(0, 16) : '',
       maxUsesPerUser: promo.maxUsesPerUser,
       isActive: promo.isActive,
-      allowedEmails: promo.allowedEmails || []
+      allowedEmails: promo.allowedEmails || []  // ✅ IMPORTANTE: gestisci il caso null/undefined
     });
     setShowModal(true);
   };
@@ -2745,17 +2744,22 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
                 Limita a Email Specifiche (opzionale)
               </label>
               <textarea
-                value={formData.allowedEmails.join('\n')}
+                value={Array.isArray(formData.allowedEmails) 
+                  ? formData.allowedEmails.join('\n')  // ✅ Verifica che sia array
+                  : ''}
                 onChange={(e) => setFormData({
                   ...formData, 
-                  allowedEmails: e.target.value.split('\n').filter(e => e.trim())
+                  allowedEmails: e.target.value
+                    .split('\n')
+                    .map(email => email.trim())  // ✅ Trim ogni email
+                    .filter(email => email.length > 0)  // ✅ Rimuovi righe vuote
                 })}
                 className="w-full px-3 py-2 border rounded text-sm"
                 rows={4}
                 placeholder="mario@example.com&#10;luigi@example.com&#10;(una email per riga)"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Lascia vuoto per rendere il codice valido per tutti.
+                Lascia vuoto per rendere il codice valido per tutti. Inserisci una email per riga.
               </p>
             </div>
 
