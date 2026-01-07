@@ -17,6 +17,7 @@ function App() {
   const [batches, setBatches] = useState(null);
   const [productStats, setProductStats] = useState(null);
   const [statsDateRange, setStatsDateRange] = useState({ start: '', end: '' });
+  const [comingSoonData, setComingSoonData] = useState(null);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('admin_token');
@@ -39,8 +40,9 @@ function App() {
         loadProducts(); 
         loadProductStats(); 
       }
-      if (activeTab === 'config') loadConfig();
+      if (activeTab === 'coming-soon') loadComingSoonData(); // ✅ NUOVO
       if (activeTab === 'promo') loadPromoCodes();
+      if (activeTab === 'config') loadConfig();
     }
   }, [activeTab, isAuthenticated]);
 
@@ -371,6 +373,18 @@ function App() {
     }
   };
 
+  const loadComingSoonData = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchAPI('/api/admin/products');
+      setComingSoonData(data);
+    } catch (error) {
+      console.error('Error loading coming soon data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
@@ -402,7 +416,7 @@ function App() {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-8 overflow-x-auto">
-            {['dashboard', 'orders', 'to-order', 'batches', 'products', 'promo', 'config'].map(tab => (
+            {['dashboard', 'orders', 'to-order', 'batches', 'products', 'coming-soon', 'promo', 'config'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -417,6 +431,7 @@ function App() {
                 {tab === 'to-order' && '🛒 Da Ordinare'}
                 {tab === 'batches' && '📋 Lotti'}
                 {tab === 'products' && '🛍️ Prodotti'}
+                {tab === 'coming-soon' && '⏰ Coming Soon'}
                 {tab === 'promo' && '🎟️ Codici'}
                 {tab === 'config' && '⚙️ Config'}
               </button>
@@ -437,6 +452,7 @@ function App() {
             {activeTab === 'to-order' && <ToOrder data={toOrderData} onCreateBatch={createBatch} />}
             {activeTab === 'batches' && <Batches batches={batches} onUpdate={updateBatch} />}   
             {activeTab === 'products' && <Products products={products} stats={productStats} dateRange={statsDateRange} onDateRangeChange={setStatsDateRange} onRefreshStats={loadProductStats} onCreate={createProduct} onUpdate={updateProduct} onDelete={deleteProduct} />}
+            {activeTab === 'coming-soon' && <ComingSoon products={products} />}
             {activeTab === 'promo' && <PromoCodes promoCodes={promoCodes} onCreate={createPromoCode} onUpdate={updatePromoCode} onDelete={deletePromoCode} />}
             {activeTab === 'config' && <Config config={config} updateConfig={updateConfig} />}
           </>
@@ -1726,7 +1742,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
     setFormData({
       name: '',
       slug: '',
-      category: '', // ✅ AGGIUNGI QUESTO
+      category: '',
       description: '',
       sizeGuide: '',
       basePrice: '',
@@ -1734,7 +1750,8 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
       colors: [],
       sizes: ['S', 'M', 'L', 'XL', 'XXL'],
       images: [],
-      isActive: true
+      isActive: true,
+      isComingSoon: false  // ✅ AGGIUNGI QUESTO
     });
     setEditingProduct(null);
     setNewColor('');
@@ -1753,7 +1770,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
     setFormData({
       name: product.name,
       slug: product.slug,
-      category: product.category || '', // ✅ AGGIUNGI QUESTO
+      category: product.category || '',
       description: product.description || '',
       sizeGuide: product.sizeGuide || '',
       basePrice: product.basePrice.toString(),
@@ -1761,7 +1778,8 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
       colors: [...product.colors],
       sizes: [...product.sizes],
       images: product.images || [],
-      isActive: product.isActive
+      isActive: product.isActive,
+      isComingSoon: product.isComingSoon || false  // ✅ AGGIUNGI QUESTO
     });
     setShowModal(true);
   };
@@ -2047,21 +2065,26 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
                       </div>
                     )}
 
-                    <div className="flex justify-between items-start mb-3 md:mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-base md:text-xl font-bold">{product.name}</h3>
-                          {!product.isActive && (
-                            <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">
-                              Off
-                            </span>
-                          )}
-                          {product.category && (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded capitalize">
-                              {product.category}
-                            </span>
-                          )}
-                        </div>
+                      <div className="flex justify-between items-start mb-3 md:mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-base md:text-xl font-bold">{product.name}</h3>
+                            {!product.isActive && (
+                              <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">
+                                Off
+                              </span>
+                            )}
+                            {product.isComingSoon && (
+                              <span className="px-2 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 text-xs rounded font-semibold">
+                                ⏰ Coming Soon
+                              </span>
+                            )}
+                            {product.category && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded capitalize">
+                                {product.category}
+                              </span>
+                            )}
+                          </div>
                         <p className="text-xs md:text-sm text-gray-600 mb-2">/{product.slug}</p>
                         
                         <div className="space-y-1">
@@ -2173,6 +2196,7 @@ function ProductModal({
           </div>
 
           <div className="space-y-3 md:space-y-4">
+            {/* Nome */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Nome *</label>
               <input
@@ -2184,6 +2208,7 @@ function ProductModal({
               />
             </div>
 
+            {/* Slug */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Slug *</label>
               <input
@@ -2197,7 +2222,7 @@ function ProductModal({
               />
             </div>
 
-            {/* ✅ CAMPO CATEGORIA */}
+            {/* Categoria */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Categoria</label>
               <div className="space-y-2">
@@ -2241,11 +2266,9 @@ function ProductModal({
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Usata per organizzare i prodotti nel menu
-              </p>
             </div>
 
+            {/* Descrizione */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Descrizione</label>
               <textarea
@@ -2257,6 +2280,7 @@ function ProductModal({
               />
             </div>
 
+            {/* Guida Taglie */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Guida alle Taglie</label>
               <textarea
@@ -2266,11 +2290,9 @@ function ProductModal({
                 rows={6}
                 placeholder="S: 66-69 cm petto&#10;M: 71-74 cm petto&#10;..."
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Supporta HTML semplice: usa &lt;br&gt; per andare a capo
-              </p>
             </div>
 
+            {/* Prezzi */}
             <div className="grid grid-cols-2 gap-3 md:gap-4">
               <div>
                 <label className="block text-xs md:text-sm font-medium mb-1">Prezzo Base *</label>
@@ -2295,6 +2317,7 @@ function ProductModal({
               </div>
             </div>
 
+            {/* Colori */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Colori</label>
               <div className="flex gap-2 mb-2">
@@ -2333,6 +2356,7 @@ function ProductModal({
               </div>
             </div>
 
+            {/* Immagini */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Immagini</label>
               <div className="space-y-2 mb-2">
@@ -2397,6 +2421,7 @@ function ProductModal({
               </div>
             </div>
 
+            {/* Taglie */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Taglie</label>
               <div className="flex gap-2 mb-2">
@@ -2435,19 +2460,74 @@ function ProductModal({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="isActive"
-                checked={formData.isActive}
-                onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
-                className="w-4 h-4"
-              />
-              <label htmlFor="isActive" className="text-xs md:text-sm font-medium">
-                Prodotto attivo
-              </label>
+            {/* ========== SEZIONE STATO PRODOTTO ========== */}
+            <div className="border-t pt-4 space-y-3">
+              <h4 className="font-semibold text-sm">Stato Prodotto</h4>
+              
+              {/* Toggle Attivo */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <label htmlFor="isActive" className="text-sm font-medium cursor-pointer">
+                    Prodotto Attivo
+                  </label>
+                  <p className="text-xs text-gray-600">
+                    Visibile nel catalogo pubblico
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="isActive"
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+              </div>
+
+              {/* ✅ NUOVO: Toggle Coming Soon */}
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
+                <div>
+                  <label htmlFor="isComingSoon" className="text-sm font-medium cursor-pointer flex items-center gap-2">
+                    <span>⏰</span>
+                    <span>Coming Soon</span>
+                  </label>
+                  <p className="text-xs text-gray-600">
+                    Non acquistabile, raccoglie solo interessi
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="isComingSoon"
+                    checked={formData.isComingSoon || false}
+                    onChange={(e) => setFormData({...formData, isComingSoon: e.target.checked})}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {/* Warning se Coming Soon attivo */}
+              {formData.isComingSoon && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-600 text-lg">⚠️</span>
+                    <div className="text-xs text-yellow-800">
+                      <p className="font-semibold mb-1">Modalità Coming Soon attiva</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Il prodotto sarà visibile ma non acquistabile</li>
+                        <li>Gli utenti potranno registrare il loro interesse</li>
+                        <li>Potrai notificarli quando sarà disponibile</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* Bottoni Azione */}
             <div className="flex flex-col md:flex-row gap-2 pt-4">
               <button
                 type="button"
@@ -3402,6 +3482,303 @@ function Batches({ batches, onUpdate }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComingSoon({ products }) {
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [interestedUsers, setInterestedUsers] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [notifyLoading, setNotifyLoading] = useState(false);
+  const [discountCode, setDiscountCode] = useState('');
+
+  const comingSoonProducts = products?.filter(p => p.isComingSoon) || [];
+
+  const loadInterestedUsers = async (productId) => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch(`${API_URL}/api/admin/products/${productId}/interested-users`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      
+      setInterestedUsers(data.interests);
+      setStats(data.stats);
+      setSelectedProduct(productId);
+    } catch (error) {
+      console.error('Error loading interested users:', error);
+      alert('Errore nel caricamento utenti interessati');
+    }
+  };
+
+  const handleNotifyUsers = async () => {
+    if (!selectedProduct) return;
+    
+    const pending = stats?.pending || 0;
+    if (pending === 0) {
+      alert('Nessun utente da notificare');
+      return;
+    }
+
+    if (!confirm(`Vuoi inviare ${pending} email di notifica?`)) return;
+
+    setNotifyLoading(true);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch(`${API_URL}/api/admin/products/${selectedProduct}/notify-interested`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          discountCode: discountCode || undefined,
+          onlyPending: true
+        })
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`✅ ${data.notified} email inviate con successo!`);
+        loadInterestedUsers(selectedProduct); // Ricarica lista
+        setDiscountCode('');
+      } else {
+        throw new Error(data.error || 'Errore invio email');
+      }
+    } catch (error) {
+      console.error('Error notifying users:', error);
+      alert('Errore durante l\'invio delle notifiche');
+    } finally {
+      setNotifyLoading(false);
+    }
+  };
+
+  const exportToCSV = () => {
+    if (!interestedUsers || interestedUsers.length === 0) return;
+
+    let csv = 'Email,Nome,Colore Preferito,Taglia Preferita,Data Registrazione,Notificato\n';
+    interestedUsers.forEach(user => {
+      csv += `${user.userEmail},${user.userName},${user.preferredColor || '-'},${user.preferredSize || '-'},${new Date(user.createdAt).toLocaleString('it-IT')},${user.notifiedAt ? 'Sì' : 'No'}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `interessati-${selectedProduct}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">⏰ Prodotti Coming Soon</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {comingSoonProducts.length} prodotti in arrivo
+          </p>
+        </div>
+      </div>
+
+      {comingSoonProducts.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <div className="text-6xl mb-4">📦</div>
+          <p className="text-gray-500 text-lg">Nessun prodotto "Coming Soon" configurato</p>
+          <p className="text-sm text-gray-400 mt-2">
+            Vai su "Prodotti" e attiva il flag "Coming Soon" per un prodotto
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Lista Prodotti Coming Soon */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg">Prodotti</h3>
+            {comingSoonProducts.map(product => (
+              <div key={product.id} 
+                   className={`bg-white rounded-lg shadow p-4 cursor-pointer transition hover:shadow-lg ${
+                     selectedProduct === product.id ? 'ring-2 ring-purple-500' : ''
+                   }`}
+                   onClick={() => loadInterestedUsers(product.id)}>
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1">
+                    <h4 className="font-bold text-lg">{product.name}</h4>
+                    {product.category && (
+                      <span className="text-xs bg-gray-100 px-2 py-1 rounded capitalize">
+                        {product.category}
+                      </span>
+                    )}
+                  </div>
+                  <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
+                    Coming Soon
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-4 text-sm text-gray-600 mt-3">
+                  <span>👥 {/* Carica dinamicamente */} interessati</span>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      loadInterestedUsers(product.id);
+                    }}
+                    className="text-purple-600 hover:underline text-xs">
+                    Vedi dettagli →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Dettaglio Utenti Interessati */}
+          <div className="bg-white rounded-lg shadow p-6">
+            {!selectedProduct ? (
+              <div className="text-center py-12 text-gray-400">
+                <div className="text-5xl mb-3">👈</div>
+                <p>Seleziona un prodotto per vedere gli utenti interessati</p>
+              </div>
+            ) : interestedUsers === null ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-bold text-lg">Utenti Interessati</h3>
+                  <button
+                    onClick={exportToCSV}
+                    className="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    📊 Esporta CSV
+                  </button>
+                </div>
+
+                {/* Statistiche */}
+                {stats && (
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
+                      <p className="text-xs text-gray-600">Totali</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-green-600">{stats.pending}</p>
+                      <p className="text-xs text-gray-600">Da Notificare</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-gray-600">{stats.notified}</p>
+                      <p className="text-xs text-gray-600">Notificati</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preferenze Aggregate */}
+                {stats && (Object.keys(stats.byColor).length > 0 || Object.keys(stats.bySize).length > 0) && (
+                  <div className="bg-purple-50 rounded-lg p-4 mb-6">
+                    <p className="font-semibold text-sm mb-2">📊 Preferenze più richieste</p>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      {Object.keys(stats.byColor).length > 0 && (
+                        <div>
+                          <p className="text-gray-600 mb-1">Colori:</p>
+                          {Object.entries(stats.byColor)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([color, count]) => (
+                              <div key={color} className="flex justify-between">
+                                <span className="capitalize">{color}:</span>
+                                <span className="font-bold">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                      {Object.keys(stats.bySize).length > 0 && (
+                        <div>
+                          <p className="text-gray-600 mb-1">Taglie:</p>
+                          {Object.entries(stats.bySize)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([size, count]) => (
+                              <div key={size} className="flex justify-between">
+                                <span>{size}:</span>
+                                <span className="font-bold">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Form Notifica */}
+                {stats && stats.pending > 0 && (
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 mb-6">
+                    <p className="font-semibold text-sm mb-3">📧 Invia Notifica Disponibilità</p>
+                    <input
+                      type="text"
+                      value={discountCode}
+                      onChange={(e) => setDiscountCode(e.target.value)}
+                      placeholder="Codice sconto (opzionale)"
+                      className="w-full px-3 py-2 border rounded text-sm mb-3"
+                    />
+                    <button
+                      onClick={handleNotifyUsers}
+                      disabled={notifyLoading}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-2 rounded font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50">
+                      {notifyLoading ? 'Invio in corso...' : `📨 Notifica ${stats.pending} utenti`}
+                    </button>
+                  </div>
+                )}
+
+                {/* Lista Utenti */}
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {interestedUsers.length === 0 ? (
+                    <p className="text-center text-gray-400 py-8 text-sm">
+                      Nessun utente ha ancora mostrato interesse
+                    </p>
+                  ) : (
+                    interestedUsers.map(user => (
+                      <div key={user.id} 
+                           className={`border rounded p-3 text-sm ${
+                             user.notifiedAt ? 'bg-gray-50' : 'bg-white'
+                           }`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="font-semibold">{user.userName}</p>
+                            <p className="text-xs text-gray-600">{user.userEmail}</p>
+                          </div>
+                          {user.notifiedAt && (
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                              ✓ Notificato
+                            </span>
+                          )}
+                        </div>
+                        
+                        {(user.preferredColor || user.preferredSize) && (
+                          <div className="flex gap-2 text-xs text-gray-600">
+                            {user.preferredColor && (
+                              <span className="bg-gray-100 px-2 py-0.5 rounded capitalize">
+                                🎨 {user.preferredColor}
+                              </span>
+                            )}
+                            {user.preferredSize && (
+                              <span className="bg-gray-100 px-2 py-0.5 rounded">
+                                📏 {user.preferredSize}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        
+                        <p className="text-xs text-gray-400 mt-2">
+                          Registrato: {new Date(user.createdAt).toLocaleDateString('it-IT')}
+                          {user.notifiedAt && ` • Notificato: ${new Date(user.notifiedAt).toLocaleDateString('it-IT')}`}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
