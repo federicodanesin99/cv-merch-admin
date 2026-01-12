@@ -2183,7 +2183,37 @@ function ProductModal({
   addImage, removeImage, handleSubmit, onClose
 }) {
   const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+  // ✅ NUOVO: Funzione per aggiungere immagini senza colore
+  const addImageWithoutColor = () => {
+    if (!newImageUrl.trim()) {
+      alert('Inserisci un URL valido');
+      return;
+    }
 
+    const defaultColor = 'Standard';
+    const existingColorImage = formData.images.find(img => img.color === defaultColor);
+    
+    if (existingColorImage) {
+      setFormData({
+        ...formData,
+        images: formData.images.map(img =>
+          img.color === defaultColor
+            ? { ...img, urls: [...img.urls, newImageUrl.trim()] }
+            : img
+        )
+      });
+    } else {
+      setFormData({
+        ...formData,
+        images: [...formData.images, { color: defaultColor, urls: [newImageUrl.trim()] }]
+      });
+    }
+
+    setNewImageUrl('');
+  };
+
+  // ✅ NUOVO: Check se prodotto ha colori
+  const hasColors = formData.colors && formData.colors.length > 0;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-lg max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
@@ -2317,9 +2347,16 @@ function ProductModal({
               </div>
             </div>
 
-            {/* Colori */}
+            {/* ========== COLORI (opzionale) ========== */}
             <div>
-              <label className="block text-xs md:text-sm font-medium mb-1">Colori</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs md:text-sm font-medium">
+                  Colori <span className="text-gray-400 text-xs">(opzionale)</span>
+                </label>
+                <span className="text-xs text-gray-500 italic">
+                  Lascia vuoto per prodotti senza varianti colore
+                </span>
+              </div>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
@@ -2327,7 +2364,7 @@ function ProductModal({
                   onChange={(e) => setNewColor(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addColor())}
                   className="flex-1 px-3 py-2 border rounded text-sm"
-                  placeholder="Aggiungi colore..."
+                  placeholder="es. Nero, Bianco, Rosso..."
                 />
                 <button
                   type="button"
@@ -2354,73 +2391,145 @@ function ProductModal({
                   </span>
                 ))}
               </div>
+              {!hasColors && (
+                <p className="text-xs text-blue-600 mt-2 bg-blue-50 p-2 rounded">
+                  💡 Nessun colore aggiunto: le immagini saranno associate al prodotto senza varianti
+                </p>
+              )}
             </div>
 
-            {/* Immagini */}
+            {/* ========== IMMAGINI (con supporto per prodotti senza colori) ========== */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Immagini</label>
-              <div className="space-y-2 mb-2">
-                <select
-                  value={selectedColorForImage}
-                  onChange={(e) => setSelectedColorForImage(e.target.value)}
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  disabled={formData.colors.length === 0}
-                >
-                  <option value="">Seleziona colore...</option>
-                  {formData.colors.map((color, i) => (
-                    <option key={i} value={color}>{color}</option>
-                  ))}
-                </select>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={newImageUrl}
-                    onChange={(e) => setNewImageUrl(e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded text-sm"
-                    placeholder="URL immagine..."
-                  />
-                  <button
-                    type="button"
-                    onClick={addImage}
-                    className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+              
+              {/* Se ci sono colori: selettore colore */}
+              {hasColors ? (
+                <div className="space-y-2 mb-2">
+                  <select
+                    value={selectedColorForImage}
+                    onChange={(e) => setSelectedColorForImage(e.target.value)}
+                    className="w-full px-3 py-2 border rounded text-sm"
                   >
-                    +
-                  </button>
+                    <option value="">Seleziona colore...</option>
+                    {formData.colors.map((color, i) => (
+                      <option key={i} value={color}>{color}</option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 border rounded text-sm"
+                      placeholder="URL immagine..."
+                    />
+                    <button
+                      type="button"
+                      onClick={addImage}
+                      className="px-3 md:px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm whitespace-nowrap"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Se NON ci sono colori: input diretto */
+                <div className="space-y-2 mb-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addImageWithoutColor())}
+                      className="flex-1 px-3 py-2 border rounded text-sm"
+                      placeholder="URL immagine..."
+                    />
+                    <button
+                      type="button"
+                      onClick={addImageWithoutColor}
+                      className="px-3 md:px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm whitespace-nowrap"
+                    >
+                      + Aggiungi
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Le immagini saranno visibili senza selezione colore
+                  </p>
+                </div>
+              )}
 
+              {/* Lista immagini */}
               <div className="space-y-2 max-h-40 md:max-h-64 overflow-y-auto">
-                {formData.colors.map(color => {
-                  const colorImages = formData.images.find(img => img.color === color);
-                  if (!colorImages || colorImages.urls.length === 0) return null;
+                {hasColors ? (
+                  /* Con colori: raggruppa per colore */
+                  formData.colors.map(color => {
+                    const colorImages = formData.images.find(img => img.color === color);
+                    if (!colorImages || colorImages.urls.length === 0) return null;
 
-                  return (
-                    <div key={color} className="border rounded p-2 bg-gray-50">
-                      <p className="text-xs font-semibold mb-2">{color}</p>
-                      <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                        {colorImages.urls.map((url, i) => (
-                          <div key={i} className="relative group">
-                            <img
-                              src={url}
-                              alt={`${color}-${i}`}
-                              className="w-full h-16 md:h-20 object-cover rounded"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeImage(color, url)}
-                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
+                    return (
+                      <div key={color} className="border rounded p-2 bg-gray-50">
+                        <p className="text-xs font-semibold mb-2">{color}</p>
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                          {colorImages.urls.map((url, i) => (
+                            <div key={i} className="relative group">
+                              <img
+                                src={url}
+                                alt={`${color}-${i}`}
+                                className="w-full h-16 md:h-20 object-cover rounded"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(color, url)}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  /* Senza colori: mostra tutte le immagini direttamente */
+                  (() => {
+                    const standardImages = formData.images.find(img => img.color === 'Standard');
+                    if (!standardImages || standardImages.urls.length === 0) {
+                      return (
+                        <p className="text-center text-gray-400 text-sm py-4">
+                          Nessuna immagine aggiunta
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="border rounded p-2 bg-gray-50">
+                        <p className="text-xs font-semibold mb-2">Immagini Prodotto</p>
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                          {standardImages.urls.map((url, i) => (
+                            <div key={i} className="relative group">
+                              <img
+                                src={url}
+                                alt={`image-${i}`}
+                                className="w-full h-16 md:h-20 object-cover rounded"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage('Standard', url)}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
               </div>
             </div>
-
+            
             {/* Taglie */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Taglie</label>
