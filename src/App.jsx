@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import AdminPromotionsPanel from './components/AdminPromotionsPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -18,6 +19,7 @@ function App() {
   const [productStats, setProductStats] = useState(null);
   const [statsDateRange, setStatsDateRange] = useState({ start: '', end: '' });
   const [comingSoonData, setComingSoonData] = useState(null);
+  const [promotions, setPromotions] = useState(null);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('admin_token');
@@ -36,12 +38,13 @@ function App() {
       if (activeTab === 'orders') loadOrders();
       if (activeTab === 'to-order') loadToOrder();
       if (activeTab === 'batches') loadBatches();
-      if (activeTab === 'products') { 
-        loadProducts(); 
-        loadProductStats(); 
+      if (activeTab === 'products') {
+        loadProducts();
+        loadProductStats();
       }
       if (activeTab === 'coming-soon') loadComingSoonData(); // ✅ NUOVO
       if (activeTab === 'promo') loadPromoCodes();
+      if (activeTab === 'promotions') loadPromotions();
       if (activeTab === 'config') loadConfig();
     }
   }, [activeTab, isAuthenticated]);
@@ -60,16 +63,16 @@ function App() {
   const fetchAPI = async (endpoint, options = {}) => {
     const maxRetries = 2;
     let lastError;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const url = `${API_URL}${endpoint}`;
         console.log(`[${attempt}/${maxRetries}] Fetching: ${url}`);
-        
+
         const controller = new AbortController();
         const timeout = attempt === 1 ? 30000 : 15000;
         const timeoutId = setTimeout(() => controller.abort(), timeout);
-        
+
         const res = await fetch(url, {
           ...options,
           signal: controller.signal,
@@ -79,7 +82,7 @@ function App() {
             ...options.headers
           }
         });
-        
+
         clearTimeout(timeoutId);
 
         if (res.status === 401) {
@@ -101,7 +104,7 @@ function App() {
       } catch (error) {
         lastError = error;
         console.error(`Attempt ${attempt} failed:`, error);
-        
+
         if (attempt < maxRetries && error.name !== 'AbortError') {
           console.log(`Retrying in 2s...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -110,7 +113,7 @@ function App() {
         }
       }
     }
-    
+
     throw lastError;
   };
 
@@ -292,6 +295,19 @@ function App() {
     }
   };
 
+  const loadPromotions = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchAPI('/api/admin/promotions');
+      setPromotions(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error loading promotions:', error);
+      setPromotions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadToOrder = async () => {
     setLoading(true);
     try {
@@ -322,7 +338,7 @@ function App() {
       const params = new URLSearchParams();
       if (statsDateRange.start) params.append('startDate', statsDateRange.start);
       if (statsDateRange.end) params.append('endDate', statsDateRange.end);
-      
+
       const data = await fetchAPI(`/api/admin/products/stats?${params}`);
       setProductStats(data);
     } catch (error) {
@@ -403,7 +419,7 @@ function App() {
                 <p className="text-xs text-gray-500">Pannello di controllo</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded hover:bg-gray-100 transition"
             >
@@ -416,15 +432,14 @@ function App() {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-8 overflow-x-auto">
-            {['dashboard', 'orders', 'to-order', 'batches', 'products', 'coming-soon', 'promo', 'config'].map(tab => (
+            {['dashboard', 'orders', 'to-order', 'batches', 'products', 'coming-soon', 'promo', 'promotions', 'config'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-4 px-2 border-b-2 font-medium text-sm transition whitespace-nowrap ${
-                  activeTab === tab
-                    ? 'border-black text-black'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-2 border-b-2 font-medium text-sm transition whitespace-nowrap ${activeTab === tab
+                  ? 'border-black text-black'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 {tab === 'dashboard' && '📊 Dashboard'}
                 {tab === 'orders' && '📦 Ordini'}
@@ -433,6 +448,7 @@ function App() {
                 {tab === 'products' && '🛍️ Prodotti'}
                 {tab === 'coming-soon' && '⏰ Coming Soon'}
                 {tab === 'promo' && '🎟️ Codici'}
+                {tab === 'promotions' && '🎁 Promozioni'}
                 {tab === 'config' && '⚙️ Config'}
               </button>
             ))}
@@ -450,10 +466,11 @@ function App() {
             {activeTab === 'dashboard' && <Dashboard analytics={analytics} orders={orders} onCreate={createManualOrder} />}
             {activeTab === 'orders' && <Orders orders={orders} updateStatus={updateOrderStatus} deleteOrder={deleteOrder} adminToken={adminToken} />}
             {activeTab === 'to-order' && <ToOrder data={toOrderData} onCreateBatch={createBatch} />}
-            {activeTab === 'batches' && <Batches batches={batches} onUpdate={updateBatch} />}   
+            {activeTab === 'batches' && <Batches batches={batches} onUpdate={updateBatch} />}
             {activeTab === 'products' && <Products products={products} stats={productStats} dateRange={statsDateRange} onDateRangeChange={setStatsDateRange} onRefreshStats={loadProductStats} onCreate={createProduct} onUpdate={updateProduct} onDelete={deleteProduct} />}
             {activeTab === 'coming-soon' && <ComingSoon products={products} />}
             {activeTab === 'promo' && <PromoCodes promoCodes={promoCodes} onCreate={createPromoCode} onUpdate={updatePromoCode} onDelete={deletePromoCode} />}
+            {activeTab === 'promotions' && <AdminPromotionsPanel />}
             {activeTab === 'config' && <Config config={config} updateConfig={updateConfig} />}
           </>
         )}
@@ -471,16 +488,16 @@ function Login({ onLogin }) {
   const handleSubmit = async () => {
     setLoading(true);
     setError('');
-    
+
     try {
       try {
-        await fetch(`${API_URL}/health`, { 
-          signal: AbortSignal.timeout(5000) 
+        await fetch(`${API_URL}/health`, {
+          signal: AbortSignal.timeout(5000)
         });
       } catch (e) {
         console.log('Backend warming up...');
       }
-      
+
       const res = await fetch(`${API_URL}/api/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -489,7 +506,7 @@ function Login({ onLogin }) {
       });
 
       const data = await res.json();
-      
+
       if (res.ok && data.token) {
         localStorage.setItem('admin_token', data.token);
         onLogin(data.token);
@@ -555,8 +572,8 @@ function Login({ onLogin }) {
 function Dashboard({ analytics, orders, onCreate }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
-    payments: true,
-    chart: true,
+    payments: false,
+    chart: false,
     delivered: false
   });
 
@@ -618,8 +635,8 @@ function Dashboard({ analytics, orders, onCreate }) {
           <p className="text-xs md:text-sm text-gray-600 mb-1">Ordinati</p>
           <p className="text-2xl md:text-3xl font-bold text-blue-600">{analytics.orderedOrders || 0}</p>
         </div>
-        <div 
-          className="bg-white rounded-lg shadow p-4 md:p-6 cursor-pointer hover:bg-gray-50 transition" 
+        <div
+          className="bg-white rounded-lg shadow p-4 md:p-6 cursor-pointer hover:bg-gray-50 transition"
           onClick={() => toggleSection('delivered')}
         >
           <p className="text-xs md:text-sm text-gray-600 mb-1">Consegnati 📦</p>
@@ -637,7 +654,7 @@ function Dashboard({ analytics, orders, onCreate }) {
           <h3 className="text-lg font-semibold">💰 Dettaglio Pagamenti</h3>
           <span className="text-xl">{expandedSections.payments ? '▲' : '▼'}</span>
         </button>
-        
+
         {expandedSections.payments && (
           <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white rounded-lg shadow p-4 md:p-6">
@@ -674,7 +691,7 @@ function Dashboard({ analytics, orders, onCreate }) {
           <h3 className="text-lg font-semibold">📊 Statistiche Visive</h3>
           <span className="text-xl">{expandedSections.chart ? '▲' : '▼'}</span>
         </button>
-        
+
         {expandedSections.chart && (
           <div className="p-4 border-t">
             <ResponsiveContainer width="100%" height={250}>
@@ -704,7 +721,7 @@ function Dashboard({ analytics, orders, onCreate }) {
           </div>
           <span className="text-xl">{expandedSections.delivered ? '▲' : '▼'}</span>
         </button>
-        
+
         {expandedSections.delivered && (
           <div className="p-4 border-t">
             {deliveredOrders.length === 0 ? (
@@ -827,17 +844,17 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
 
   const calculateTotal = () => {
     if (formData.customTotal) return parseFloat(formData.customTotal);
-    
+
     if (!Array.isArray(products) || products.length === 0) return 0;
-    
+
     return formData.items.reduce((sum, item) => {
       const product = products.find(p => p.id === item.productId);
       if (!product) return sum;
-      
-      const price = item.customPrice 
-        ? parseFloat(item.customPrice) 
+
+      const price = item.customPrice
+        ? parseFloat(item.customPrice)
         : (product.launchPrice || product.basePrice);
-      
+
       return sum + (price * item.quantity);
     }, 0);
   };
@@ -896,7 +913,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
                 <input
                   type="text"
                   value={formData.customerName}
-                  onChange={(e) => setFormData({...formData, customerName: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   placeholder="Mario Rossi"
                 />
@@ -906,7 +923,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
                 <input
                   type="email"
                   value={formData.customerEmail}
-                  onChange={(e) => setFormData({...formData, customerEmail: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   placeholder="mario@example.com"
                   required
@@ -917,7 +934,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
                 <input
                   type="tel"
                   value={formData.customerPhone}
-                  onChange={(e) => setFormData({...formData, customerPhone: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   placeholder="+39 123 456 7890"
                 />
@@ -933,7 +950,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
                 <label className="block text-sm font-medium mb-1">Metodo</label>
                 <select
                   value={formData.paymentMethod}
-                  onChange={(e) => setFormData({...formData, paymentMethod: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                 >
                   <option value="paypal">PayPal</option>
@@ -944,7 +961,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
                 <label className="block text-sm font-medium mb-1">Stato</label>
                 <select
                   value={formData.paymentStatus}
-                  onChange={(e) => setFormData({...formData, paymentStatus: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                 >
                   <option value="PENDING">In Attesa</option>
@@ -971,7 +988,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
             <div className="space-y-3">
               {formData.items.map((item, index) => {
                 const selectedProduct = products.find(p => p.id === item.productId);
-                
+
                 return (
                   <div key={index} className="bg-white rounded-lg p-3 border">
                     <div className="grid grid-cols-12 gap-2">
@@ -1078,7 +1095,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
                 type="number"
                 step="0.01"
                 value={formData.customTotal}
-                onChange={(e) => setFormData({...formData, customTotal: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, customTotal: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm"
                 placeholder="Lascia vuoto per calcolo automatico"
               />
@@ -1090,7 +1107,7 @@ function CreateOrderModal({ onClose, onCreate, products: productsProp }) {
             <label className="block text-sm font-medium mb-1">📝 Note</label>
             <textarea
               value={formData.notes}
-              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               className="w-full px-3 py-2 border rounded text-sm"
               rows={2}
               placeholder="Note interne sull'ordine..."
@@ -1129,7 +1146,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
 
   const filteredOrders = orders.filter(o => {
     const matchesStatus = filter === 'ALL' || o.paymentStatus === filter;
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       o.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (o.customerName && o.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       o.uniqueCode.toLowerCase().includes(searchTerm.toLowerCase());
@@ -1140,7 +1157,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
   const currentFilterStats = {
     totalOrders: filteredOrders.length,
     totalRevenue: filteredOrders.reduce((sum, o) => sum + o.total, 0),
-    totalItems: filteredOrders.reduce((sum, o) => 
+    totalItems: filteredOrders.reduce((sum, o) =>
       sum + o.items.reduce((s, i) => s + i.quantity, 0), 0
     ),
     byProduct: {}
@@ -1192,10 +1209,10 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
     setIsExporting(true);
     try {
       const statusParam = exportStatuses.includes('ALL') || exportStatuses.length === 0
-        ? 'ALL' 
+        ? 'ALL'
         : exportStatuses.join(',');
       const url = `${API_URL}/api/admin/orders/export?statuses=${statusParam}`;
-      
+
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${adminToken}`
@@ -1216,7 +1233,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
-      
+
     } catch (error) {
       console.error('Export error:', error);
       alert('Errore nella esportazione: ' + error.message);
@@ -1251,7 +1268,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
             className="flex-1 px-4 py-2 border rounded-lg text-sm"
           />
         </div>
-        
+
         <div className="mb-3">
           <p className="text-xs font-medium text-gray-600 mb-2">Filtra visualizzazione:</p>
           <div className="flex gap-2 overflow-x-auto">
@@ -1259,11 +1276,10 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
               <button
                 key={status}
                 onClick={() => handleFilterChange(status)}
-                className={`px-3 md:px-4 py-2 rounded font-medium text-xs md:text-sm transition whitespace-nowrap ${
-                  filter === status
-                    ? 'bg-black text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-3 md:px-4 py-2 rounded font-medium text-xs md:text-sm transition whitespace-nowrap ${filter === status
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 {status}
               </button>
@@ -1369,7 +1385,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
                     {order.paymentStatus}
                   </span>
                 </div>
-                
+
                 <div className="space-y-1 text-sm">
                   {order.customerName && (
                     <p className="font-medium text-gray-900">👤 {order.customerName}</p>
@@ -1387,7 +1403,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
                   </p>
                 </div>
               </div>
-              
+
               <div className="text-left md:text-right">
                 <p className="text-xl md:text-2xl font-bold">€{order.total.toFixed(2)}</p>
                 {order.discount > 0 && (
@@ -1431,7 +1447,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
                   </button>
                 </>
               )}
-              
+
               {order.paymentStatus === 'ORDERED' && (
                 <button
                   onClick={() => updateStatus(order.id, 'DELIVERED')}
@@ -1440,13 +1456,13 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
                   📦 Segna come Consegnato
                 </button>
               )}
-              
+
               {order.paymentStatus === 'PAID' && !order.batchId && (
                 <p className="text-xs text-gray-500 italic py-2">
                   ℹ️ Vai su "Da Ordinare" per includere in un lotto
                 </p>
               )}
-              
+
               <button
                 onClick={() => handleDelete(order.id, order.orderNumber)}
                 className="px-3 md:px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-xs md:text-sm font-medium transition"
@@ -1468,7 +1484,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
             <p className="text-sm text-gray-600">
               Mostrando {startIndex + 1}-{Math.min(startIndex + ordersPerPage, filteredOrders.length)} di {filteredOrders.length} ordini
             </p>
-            
+
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(1)}
@@ -1484,7 +1500,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
               >
                 ‹
               </button>
-              
+
               <div className="flex items-center gap-1">
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   let pageNum;
@@ -1497,23 +1513,22 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
                   } else {
                     pageNum = currentPage - 2 + i;
                   }
-                  
+
                   return (
                     <button
                       key={pageNum}
                       onClick={() => setCurrentPage(pageNum)}
-                      className={`px-3 py-2 rounded text-sm ${
-                        currentPage === pageNum
-                          ? 'bg-black text-white'
-                          : 'bg-gray-100 hover:bg-gray-200'
-                      }`}
+                      className={`px-3 py-2 rounded text-sm ${currentPage === pageNum
+                        ? 'bg-black text-white'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                        }`}
                     >
                       {pageNum}
                     </button>
                   );
                 })}
               </div>
-              
+
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
@@ -1539,7 +1554,7 @@ function Orders({ orders, updateStatus, deleteOrder, adminToken }) {
 function Config({ config, updateConfig }) {
   const [editMode, setEditMode] = useState(null);
   const [editValue, setEditValue] = useState('');
-  
+
   const launchPricesConfig = config.find(c => c.key === 'launch_prices_active');
   const launchPricesActive = launchPricesConfig?.value?.active || false;
   const promoCodesConfig = config.find(c => c.key === 'promo_codes_visible');
@@ -1559,7 +1574,7 @@ function Config({ config, updateConfig }) {
       alert('JSON non valido: ' + err.message);
     }
   };
-  
+
   const toggleLaunchPrices = async () => {
     try {
       await updateConfig('launch_prices_active', { active: !launchPricesActive });
@@ -1856,7 +1871,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
     }
 
     const existingColorImage = formData.images.find(img => img.color === selectedColorForImage);
-    
+
     if (existingColorImage) {
       setFormData({
         ...formData,
@@ -1917,7 +1932,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
                 <input
                   type="date"
                   value={dateRange.start}
-                  onChange={(e) => onDateRangeChange({...dateRange, start: e.target.value})}
+                  onChange={(e) => onDateRangeChange({ ...dateRange, start: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                 />
               </div>
@@ -1926,7 +1941,7 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
                 <input
                   type="date"
                   value={dateRange.end}
-                  onChange={(e) => onDateRangeChange({...dateRange, end: e.target.value})}
+                  onChange={(e) => onDateRangeChange({ ...dateRange, end: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                 />
               </div>
@@ -2048,16 +2063,16 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {products.map(product => {
-                const firstImage = product.images && product.images.length > 0 
-                  ? product.images[0].urls[0] 
+                const firstImage = product.images && product.images.length > 0
+                  ? product.images[0].urls[0]
                   : null;
-                
+
                 return (
                   <div key={product.id} className="bg-white rounded-lg shadow p-4 md:p-6">
                     {firstImage && (
                       <div className="mb-4">
-                        <img 
-                          src={firstImage} 
+                        <img
+                          src={firstImage}
                           alt={product.name}
                           className="w-full h-40 md:h-48 object-cover rounded"
                           onError={(e) => e.target.style.display = 'none'}
@@ -2065,28 +2080,28 @@ function Products({ products, stats, dateRange, onDateRangeChange, onRefreshStat
                       </div>
                     )}
 
-                      <div className="flex justify-between items-start mb-3 md:mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="text-base md:text-xl font-bold">{product.name}</h3>
-                            {!product.isActive && (
-                              <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">
-                                Off
-                              </span>
-                            )}
-                            {product.isComingSoon && (
-                              <span className="px-2 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 text-xs rounded font-semibold">
-                                ⏰ Coming Soon
-                              </span>
-                            )}
-                            {product.category && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded capitalize">
-                                {product.category}
-                              </span>
-                            )}
-                          </div>
+                    <div className="flex justify-between items-start mb-3 md:mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-base md:text-xl font-bold">{product.name}</h3>
+                          {!product.isActive && (
+                            <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded">
+                              Off
+                            </span>
+                          )}
+                          {product.isComingSoon && (
+                            <span className="px-2 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 text-xs rounded font-semibold">
+                              ⏰ Coming Soon
+                            </span>
+                          )}
+                          {product.category && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded capitalize">
+                              {product.category}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs md:text-sm text-gray-600 mb-2">/{product.slug}</p>
-                        
+
                         <div className="space-y-1">
                           <p className="text-sm md:text-lg font-semibold">
                             €{product.basePrice.toFixed(2)}
@@ -2192,7 +2207,7 @@ function ProductModal({
 
     const defaultColor = 'Standard';
     const existingColorImage = formData.images.find(img => img.color === defaultColor);
-    
+
     if (existingColorImage) {
       setFormData({
         ...formData,
@@ -2232,7 +2247,7 @@ function ProductModal({
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm"
                 required
               />
@@ -2244,7 +2259,7 @@ function ProductModal({
               <input
                 type="text"
                 value={formData.slug}
-                onChange={(e) => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
+                onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
                 className="w-full px-3 py-2 border rounded text-sm"
                 placeholder="hoody-militare"
                 required
@@ -2260,7 +2275,7 @@ function ProductModal({
                   <div className="flex gap-2">
                     <select
                       value={formData.category}
-                      onChange={(e) => setFormData({...formData, category: e.target.value})}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       className="flex-1 px-3 py-2 border rounded text-sm capitalize"
                     >
                       <option value="">Nessuna categoria</option>
@@ -2281,7 +2296,7 @@ function ProductModal({
                     <input
                       type="text"
                       value={formData.category}
-                      onChange={(e) => setFormData({...formData, category: e.target.value.toLowerCase()})}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value.toLowerCase() })}
                       className="flex-1 px-3 py-2 border rounded text-sm"
                       placeholder="es. felpe, t-shirt, cd..."
                       autoFocus
@@ -2303,7 +2318,7 @@ function ProductModal({
               <label className="block text-xs md:text-sm font-medium mb-1">Descrizione</label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm"
                 rows={3}
                 placeholder="Breve descrizione del prodotto..."
@@ -2315,7 +2330,7 @@ function ProductModal({
               <label className="block text-xs md:text-sm font-medium mb-1">Guida alle Taglie</label>
               <textarea
                 value={formData.sizeGuide}
-                onChange={(e) => setFormData({...formData, sizeGuide: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, sizeGuide: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm font-mono"
                 rows={6}
                 placeholder="S: 66-69 cm petto&#10;M: 71-74 cm petto&#10;..."
@@ -2330,7 +2345,7 @@ function ProductModal({
                   type="number"
                   step="0.01"
                   value={formData.basePrice}
-                  onChange={(e) => setFormData({...formData, basePrice: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   required
                 />
@@ -2341,7 +2356,7 @@ function ProductModal({
                   type="number"
                   step="0.01"
                   value={formData.launchPrice}
-                  onChange={(e) => setFormData({...formData, launchPrice: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, launchPrice: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                 />
               </div>
@@ -2401,7 +2416,7 @@ function ProductModal({
             {/* ========== IMMAGINI (con supporto per prodotti senza colori) ========== */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Immagini</label>
-              
+
               {/* Se ci sono colori: selettore colore */}
               {hasColors ? (
                 <div className="space-y-2 mb-2">
@@ -2529,7 +2544,7 @@ function ProductModal({
                 )}
               </div>
             </div>
-            
+
             {/* Taglie */}
             <div>
               <label className="block text-xs md:text-sm font-medium mb-1">Taglie</label>
@@ -2572,7 +2587,7 @@ function ProductModal({
             {/* ========== SEZIONE STATO PRODOTTO ========== */}
             <div className="border-t pt-4 space-y-3">
               <h4 className="font-semibold text-sm">Stato Prodotto</h4>
-              
+
               {/* Toggle Attivo */}
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
@@ -2588,7 +2603,7 @@ function ProductModal({
                     type="checkbox"
                     id="isActive"
                     checked={formData.isActive}
-                    onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
@@ -2611,7 +2626,7 @@ function ProductModal({
                     type="checkbox"
                     id="isComingSoon"
                     checked={formData.isComingSoon || false}
-                    onChange={(e) => setFormData({...formData, isComingSoon: e.target.checked})}
+                    onChange={(e) => setFormData({ ...formData, isComingSoon: e.target.checked })}
                     className="sr-only peer"
                   />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
@@ -2788,10 +2803,10 @@ function PromoCodes({ promoCodes, onCreate, onUpdate, onDelete }) {
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="space-y-1 text-sm">
                     <p className="text-xl font-semibold text-green-600">
-                      {promo.discountType === 'PERCENTAGE' 
+                      {promo.discountType === 'PERCENTAGE'
                         ? `-${promo.discountValue}%`
                         : `-€${promo.discountValue.toFixed(2)}`}
                     </p>
@@ -2865,7 +2880,7 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
               <input
                 type="text"
                 value={formData.code}
-                onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                 className="w-full px-3 py-2 border rounded text-sm font-mono uppercase"
                 placeholder="PROMO10"
                 maxLength={20}
@@ -2881,7 +2896,7 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
               <label className="block text-xs md:text-sm font-medium mb-1">Tipo Sconto *</label>
               <select
                 value={formData.discountType}
-                onChange={(e) => setFormData({...formData, discountType: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, discountType: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm"
               >
                 <option value="PERCENTAGE">Percentuale (%)</option>
@@ -2899,7 +2914,7 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
                 min="0"
                 max={formData.discountType === 'PERCENTAGE' ? '100' : undefined}
                 value={formData.discountValue}
-                onChange={(e) => setFormData({...formData, discountValue: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm"
                 placeholder={formData.discountType === 'PERCENTAGE' ? '10' : '5.00'}
                 required
@@ -2911,7 +2926,7 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
               <input
                 type="datetime-local"
                 value={formData.expiresAt}
-                onChange={(e) => setFormData({...formData, expiresAt: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
                 className="w-full px-3 py-2 border rounded text-sm"
               />
               <p className="text-xs text-gray-500 mt-1">Lascia vuoto per nessuna scadenza</p>
@@ -2923,7 +2938,7 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
                 type="number"
                 min="1"
                 value={formData.maxUsesPerUser}
-                onChange={(e) => setFormData({...formData, maxUsesPerUser: parseInt(e.target.value)})}
+                onChange={(e) => setFormData({ ...formData, maxUsesPerUser: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border rounded text-sm"
               />
             </div>
@@ -2933,11 +2948,11 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
                 Limita a Email Specifiche (opzionale)
               </label>
               <textarea
-                value={Array.isArray(formData.allowedEmails) 
+                value={Array.isArray(formData.allowedEmails)
                   ? formData.allowedEmails.join('\n')  // ✅ Verifica che sia array
                   : ''}
                 onChange={(e) => setFormData({
-                  ...formData, 
+                  ...formData,
                   allowedEmails: e.target.value
                     .split('\n')
                     .map(email => email.trim())  // ✅ Trim ogni email
@@ -2957,7 +2972,7 @@ function PromoModal({ editingPromo, formData, setFormData, handleSubmit, onClose
                 type="checkbox"
                 id="isActive"
                 checked={formData.isActive}
-                onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                 className="w-4 h-4"
               />
               <label htmlFor="isActive" className="text-xs md:text-sm font-medium">
@@ -3050,7 +3065,7 @@ function ToOrder({ data, onCreateBatch }) {
         });
       });
     });
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3072,7 +3087,7 @@ function ToOrder({ data, onCreateBatch }) {
       text += '\n';
     });
     text += `\nTOTALE: ${data.totalItems} pezzi in ${data.totalOrders} ordini`;
-    
+
     navigator.clipboard.writeText(text).then(() => {
       alert('✅ Riepilogo copiato!');
     });
@@ -3123,7 +3138,7 @@ function ToOrder({ data, onCreateBatch }) {
                   {product.total} pz
                 </span>
               </div>
-              
+
               {Object.entries(product.byColor).map(([color, colorData]) => (
                 <div key={color} className="mb-3 ml-4">
                   <p className="font-semibold text-sm mb-2">{color} - {colorData.total} pz</p>
@@ -3157,11 +3172,10 @@ function ToOrder({ data, onCreateBatch }) {
           {data.orders.map(order => (
             <div
               key={order.id}
-              className={`border rounded-lg p-3 md:p-4 cursor-pointer transition ${
-                selectedOrders.includes(order.id)
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
+              className={`border rounded-lg p-3 md:p-4 cursor-pointer transition ${selectedOrders.includes(order.id)
+                ? 'border-green-500 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+                }`}
               onClick={() => toggleOrder(order.id)}
             >
               <div className="flex items-start gap-3">
@@ -3172,7 +3186,7 @@ function ToOrder({ data, onCreateBatch }) {
                   className="mt-1 w-5 h-5"
                   onClick={(e) => e.stopPropagation()}
                 />
-                
+
                 <div className="flex-1">
                   <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2 mb-2">
                     <div>
@@ -3214,14 +3228,14 @@ function ToOrder({ data, onCreateBatch }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-xl font-bold mb-4">Crea Nuovo Lotto</h3>
-            
+
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-sm font-medium mb-1">Nome Fornitore</label>
                 <input
                   type="text"
                   value={batchInfo.supplierName}
-                  onChange={(e) => setBatchInfo({...batchInfo, supplierName: e.target.value})}
+                  onChange={(e) => setBatchInfo({ ...batchInfo, supplierName: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   placeholder="es. Fornitore XYZ"
                 />
@@ -3233,7 +3247,7 @@ function ToOrder({ data, onCreateBatch }) {
                   type="number"
                   step="0.01"
                   value={batchInfo.supplierCost}
-                  onChange={(e) => setBatchInfo({...batchInfo, supplierCost: e.target.value})}
+                  onChange={(e) => setBatchInfo({ ...batchInfo, supplierCost: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   placeholder="0.00"
                 />
@@ -3244,7 +3258,7 @@ function ToOrder({ data, onCreateBatch }) {
                 <input
                   type="date"
                   value={batchInfo.expectedDelivery}
-                  onChange={(e) => setBatchInfo({...batchInfo, expectedDelivery: e.target.value})}
+                  onChange={(e) => setBatchInfo({ ...batchInfo, expectedDelivery: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                 />
               </div>
@@ -3253,7 +3267,7 @@ function ToOrder({ data, onCreateBatch }) {
                 <label className="block text-sm font-medium mb-1">Note</label>
                 <textarea
                   value={batchInfo.notes}
-                  onChange={(e) => setBatchInfo({...batchInfo, notes: e.target.value})}
+                  onChange={(e) => setBatchInfo({ ...batchInfo, notes: e.target.value })}
                   className="w-full px-3 py-2 border rounded text-sm"
                   rows={3}
                   placeholder="Note aggiuntive..."
@@ -3341,7 +3355,7 @@ function Batches({ batches, onUpdate }) {
 
   const exportBatchCSV = (batch) => {
     const summary = {};
-    
+
     batch.orders.forEach(order => {
       order.items.forEach(item => {
         const key = `${item.product.name}|${item.color}|${item.size}`;
@@ -3384,7 +3398,7 @@ function Batches({ batches, onUpdate }) {
       ) : (
         <div className="space-y-4">
           {batches.map(batch => {
-            const totalItems = batch.orders.reduce((sum, o) => 
+            const totalItems = batch.orders.reduce((sum, o) =>
               sum + o.items.reduce((s, i) => s + i.quantity, 0), 0
             );
             const totalRevenue = batch.orders.reduce((sum, o) => sum + o.total, 0);
@@ -3455,7 +3469,7 @@ function Batches({ batches, onUpdate }) {
                     >
                       {expandedBatch === batch.id ? '▲ Nascondi' : '▼ Dettagli'}
                     </button>
-                    
+
                     <button
                       onClick={() => exportBatchCSV(batch)}
                       className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm transition"
@@ -3482,7 +3496,7 @@ function Batches({ batches, onUpdate }) {
                         <label className="block text-xs font-medium mb-1">Stato</label>
                         <select
                           value={editForm.status}
-                          onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                         >
                           <option value="DRAFT">Bozza</option>
@@ -3496,7 +3510,7 @@ function Batches({ batches, onUpdate }) {
                         <input
                           type="text"
                           value={editForm.supplierName}
-                          onChange={(e) => setEditForm({...editForm, supplierName: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, supplierName: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                         />
                       </div>
@@ -3506,7 +3520,7 @@ function Batches({ batches, onUpdate }) {
                         <input
                           type="text"
                           value={editForm.supplierOrderId}
-                          onChange={(e) => setEditForm({...editForm, supplierOrderId: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, supplierOrderId: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                         />
                       </div>
@@ -3517,7 +3531,7 @@ function Batches({ batches, onUpdate }) {
                           type="number"
                           step="0.01"
                           value={editForm.supplierCost}
-                          onChange={(e) => setEditForm({...editForm, supplierCost: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, supplierCost: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                         />
                       </div>
@@ -3527,7 +3541,7 @@ function Batches({ batches, onUpdate }) {
                         <input
                           type="date"
                           value={editForm.expectedDelivery}
-                          onChange={(e) => setEditForm({...editForm, expectedDelivery: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, expectedDelivery: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                         />
                       </div>
@@ -3537,7 +3551,7 @@ function Batches({ batches, onUpdate }) {
                         <input
                           type="date"
                           value={editForm.receivedAt}
-                          onChange={(e) => setEditForm({...editForm, receivedAt: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, receivedAt: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                         />
                       </div>
@@ -3546,7 +3560,7 @@ function Batches({ batches, onUpdate }) {
                         <label className="block text-xs font-medium mb-1">Note</label>
                         <textarea
                           value={editForm.notes}
-                          onChange={(e) => setEditForm({...editForm, notes: e.target.value})}
+                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
                           className="w-full px-3 py-2 border rounded text-sm"
                           rows={3}
                         />
@@ -3613,7 +3627,7 @@ function ComingSoon({ products }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      
+
       setInterestedUsers(data.interests);
       setStats(data.stats);
       setSelectedProduct(productId);
@@ -3625,7 +3639,7 @@ function ComingSoon({ products }) {
 
   const handleNotifyUsers = async () => {
     if (!selectedProduct) return;
-    
+
     const pending = stats?.pending || 0;
     if (pending === 0) {
       alert('Nessun utente da notificare');
@@ -3650,7 +3664,7 @@ function ComingSoon({ products }) {
       });
 
       const data = await res.json();
-      
+
       if (data.success) {
         alert(`✅ ${data.notified} email inviate con successo!`);
         loadInterestedUsers(selectedProduct); // Ricarica lista
@@ -3707,11 +3721,10 @@ function ComingSoon({ products }) {
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">Prodotti</h3>
             {comingSoonProducts.map(product => (
-              <div key={product.id} 
-                   className={`bg-white rounded-lg shadow p-4 cursor-pointer transition hover:shadow-lg ${
-                     selectedProduct === product.id ? 'ring-2 ring-purple-500' : ''
-                   }`}
-                   onClick={() => loadInterestedUsers(product.id)}>
+              <div key={product.id}
+                className={`bg-white rounded-lg shadow p-4 cursor-pointer transition hover:shadow-lg ${selectedProduct === product.id ? 'ring-2 ring-purple-500' : ''
+                  }`}
+                onClick={() => loadInterestedUsers(product.id)}>
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
                     <h4 className="font-bold text-lg">{product.name}</h4>
@@ -3725,10 +3738,10 @@ function ComingSoon({ products }) {
                     Coming Soon
                   </span>
                 </div>
-                
+
                 <div className="flex items-center gap-4 text-sm text-gray-600 mt-3">
                   <span>👥 {/* Carica dinamicamente */} interessati</span>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       loadInterestedUsers(product.id);
@@ -3846,10 +3859,9 @@ function ComingSoon({ products }) {
                     </p>
                   ) : (
                     interestedUsers.map(user => (
-                      <div key={user.id} 
-                           className={`border rounded p-3 text-sm ${
-                             user.notifiedAt ? 'bg-gray-50' : 'bg-white'
-                           }`}>
+                      <div key={user.id}
+                        className={`border rounded p-3 text-sm ${user.notifiedAt ? 'bg-gray-50' : 'bg-white'
+                          }`}>
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-semibold">{user.userName}</p>
@@ -3861,7 +3873,7 @@ function ComingSoon({ products }) {
                             </span>
                           )}
                         </div>
-                        
+
                         {(user.preferredColor || user.preferredSize) && (
                           <div className="flex gap-2 text-xs text-gray-600">
                             {user.preferredColor && (
@@ -3876,7 +3888,7 @@ function ComingSoon({ products }) {
                             )}
                           </div>
                         )}
-                        
+
                         <p className="text-xs text-gray-400 mt-2">
                           Registrato: {new Date(user.createdAt).toLocaleDateString('it-IT')}
                           {user.notifiedAt && ` • Notificato: ${new Date(user.notifiedAt).toLocaleDateString('it-IT')}`}
