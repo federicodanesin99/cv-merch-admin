@@ -477,6 +477,7 @@ function App() {
       </main>
     </div>
   );
+
 }
 
 function Login({ onLogin }) {
